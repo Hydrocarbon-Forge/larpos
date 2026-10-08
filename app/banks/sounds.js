@@ -173,5 +173,6 @@ function selectSoundsForWorld(paradigm, seed = 1) {
 
 module.exports = {
   synthesizeCue,
+  generateSoundCue: synthesizeCue,
   selectSoundsForWorld
 };

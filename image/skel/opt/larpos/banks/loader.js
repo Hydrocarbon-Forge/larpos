@@ -439,7 +439,7 @@ function resolveFont(fontId) {
  * Resolves a sound cue to a base64 WAV data URI.
  */
 function resolveSound(cue, seed) {
-  return sounds.generateSoundCue(cue, seed);
+  return typeof sounds.synthesizeCue === 'function' ? sounds.synthesizeCue(cue) : sounds.generateSoundCue(cue, seed);
 }
 
 /**

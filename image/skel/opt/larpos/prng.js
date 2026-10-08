@@ -81,5 +81,6 @@ class PRNG {
 module.exports = {
   PRNG,
   normalizeSeed,
-  hashString
+  hashString,
+  fnv1a: hashString
 };

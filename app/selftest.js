@@ -938,6 +938,106 @@ console.log('9. Testing HTTP server endpoints...');
     console.log('  ✓ DOM paradigm instantiators verified: GUI taskbar/draggable windows, TUI ASCII frames, Device gauges, procedural icons & sounds present.');
   }
 
+  // 20. Data-Driven Bank Catalog, 11-Block Registry, Cohesion Invariants C1-C6, and Sidecar Persistence
+  console.log('20. Testing data-driven bank catalog, 11-block registry, cohesion invariants C1-C6 & sidecar persistence...');
+  {
+    const bankLoader = require('./banks/loader');
+    const blocksRegistry = require('./blocks');
+
+    // A. Universal Bank Entry Schema & Fallback
+    assert(Array.isArray(bankLoader.CATALOG) && bankLoader.CATALOG.length >= 10, 'Bank catalog must contain registered entries');
+    const lucideEntry = bankLoader.getBankEntry('icons.lucide.outline');
+    assert(lucideEntry && lucideEntry.id === 'icons.lucide.outline', 'Bank loader must resolve known entry');
+    assert.strictEqual(lucideEntry.kind, 'icon-style', 'Entry kind must match schema');
+    assert.strictEqual(lucideEntry.fallback, 'icons.grammar.flat-line', 'Entry fallback must match schema');
+
+    // Unknown bank ID falls back deterministically without throwing
+    const fallbackEntry = bankLoader.getBankEntry('icons.nonexistent.unknown');
+    assert(fallbackEntry && fallbackEntry.id.startsWith('icons.'), 'Unknown icon ID must fall back to valid icon entry');
+
+    // Bank resolution functions
+    const resolvedFont = bankLoader.resolveFont('fonts.mono');
+    assert(typeof resolvedFont === 'string' && resolvedFont.includes('monospace'), 'resolveFont must return monospace stack');
+
+    const resolvedSound = bankLoader.resolveSound('click', 123);
+    assert(typeof resolvedSound === 'string' && resolvedSound.startsWith('data:audio/wav;base64,'), 'resolveSound must return WAV data URI');
+
+    // B. 11 Block Types & Envelope Contract
+    assert.strictEqual(blocksRegistry.BLOCK_TYPES.length, 11, 'Registry must register exactly 11 block types');
+    for (const bType of ['window', 'taskbar', 'menu-bar', 'button', 'gauge', 'terminal', 'icon', 'card', 'wallpaper', 'clock', 'dock']) {
+      assert(blocksRegistry.BLOCK_TYPES.includes(bType), `BLOCK_TYPES must include ${bType}`);
+    }
+
+    // Micro-geometry resolution determinism
+    const mg1 = blocksRegistry.resolveMicroGeometry('test-block', 1234);
+    const mg2 = blocksRegistry.resolveMicroGeometry('test-block', 1234);
+    assert.deepStrictEqual(mg1, mg2, 'resolveMicroGeometry must be deterministic for same blockId and seed');
+
+    // Reader-not-validator normalization & damaged shell
+    const normalized = blocksRegistry.normalizeBlock({ block: 'gauge', value: 0.7 });
+    assert.strictEqual(normalized.block, 'gauge', 'Block type must be preserved');
+    assert.strictEqual(normalized.zone, 'inline', 'Default zone must be filled');
+    assert.strictEqual(normalized.value, 0.7, 'Custom value must be preserved');
+
+    const damagedBlock = blocksRegistry.normalizeBlock(null, 'damaged-1');
+    assert.strictEqual(damagedBlock.damaged, true, 'Null block spec must normalize to damaged block shell');
+    assert.strictEqual(damagedBlock.id, 'damaged-1', 'Damaged shell must preserve id');
+
+    // Closed action grammar validation
+    const validHook = blocksRegistry.parseActionRef('open-app:terminal');
+    assert.strictEqual(validHook.valid, true, 'open-app action must be valid');
+    assert.strictEqual(validHook.action, 'open-app');
+    assert.strictEqual(validHook.target, 'terminal');
+
+    const invalidHook = blocksRegistry.parseActionRef('dangerous-eval:malware');
+    assert.strictEqual(invalidHook.valid, false, 'Unknown action must be marked invalid');
+    assert.strictEqual(invalidHook.action, 'noop', 'Invalid action must fall back to noop');
+
+    // C. Design Spec Schema & Composition (§6 in design/composition.md)
+    const world = generateWorld(789, 'a highly practical and lightweight desktop operating system');
+    const spec = world.designSpec;
+    assert(spec, 'World must include designSpec');
+    assert.strictEqual(spec.schema, 1, 'Design spec schema must be 1');
+    assert.strictEqual(spec.layout, 'generic-flat-linux', 'Practical desktop must compose generic-flat-linux layout');
+    assert(Array.isArray(spec.blocks) && spec.blocks.length >= 5, 'Materialized spec must contain block list');
+
+    // D. Cohesion Invariants C1-C6
+    // C1: Palette propagation
+    assert(spec.tokens && spec.tokens.color, 'Tokens must have color table');
+    for (const [key, hex] of Object.entries(spec.tokens.color)) {
+      assert(/^#[0-9a-fA-F]{6}$/.test(hex), `Token color ${key} (${hex}) must be valid 6-char hex`);
+    }
+    // C2: One radius, one scale
+    assert(typeof spec.tokens.radiusPx === 'number', 'Tokens radiusPx must be number');
+    assert(Array.isArray(spec.tokens.spacing) && spec.tokens.spacing.length >= 4, 'Tokens spacing must be 4-step scale');
+    // C3: Icon grammar consistency
+    assert(spec.tokens.icon && typeof spec.tokens.icon.strokeW === 'number', 'Tokens icon must define stroke width');
+    // C4: Font pairing
+    assert(spec.tokens.font && spec.tokens.font.primary && spec.tokens.font.mono, 'Tokens font must define primary and mono stacks');
+    // C5: Spacing scale
+    assert.strictEqual(spec.tokens.unit, 16, 'Tokens unit must be defined');
+    // C6: Motion
+    assert(spec.tokens.motion && typeof spec.tokens.motion.hoverMs === 'number', 'Tokens motion must define hoverMs');
+
+    // E. Disk Persistence: .larp embedded section & .design.json sidecar (§3.1 in composition.md)
+    const testDir = getStateDir();
+    const larpPath = writeWorldLarp(world, testDir);
+    assert(fs.existsSync(larpPath), 'World larp file must exist');
+
+    const larpContent = fs.readFileSync(larpPath, 'utf8');
+    assert(larpContent.includes('"section":"design"'), 'World larp file must embed design section');
+
+    const cleanSeed = String(world.seed || 'default').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const sidecarPath = path.join(testDir, `world-${cleanSeed}.design.json`);
+    assert(fs.existsSync(sidecarPath), 'Design sidecar file must exist on disk');
+
+    const sidecarJson = JSON.parse(fs.readFileSync(sidecarPath, 'utf8'));
+    assert.strictEqual(sidecarJson.schema, 1, 'Sidecar design spec must have schema 1');
+    assert.strictEqual(sidecarJson.layout, spec.layout, 'Sidecar layout must match world spec layout');
+
+    console.log('  ✓ Data-driven architecture verified: universal bank catalog, 11-block registry, cohesion invariants C1-C6, and sidecar persistence.');
+  }
+
   console.log('\n=== All Self-Tests Passed Successfully! ===');
   process.exit(0);
 })().catch(err => {
