@@ -56,7 +56,7 @@ class VirtualFS {
     // Populate /log/boot.log
     const logText = (world && Array.isArray(world.script))
       ? world.script.join('\n')
-      : '[SYSTEM BOOT COMPLETED]\nHallucination core online.';
+      : '[SYSTEM BOOT COMPLETED]\nSubsystems initialized and ready.';
     this.tree.set('/log/boot.log', { type: 'file', content: logText, mtime: now });
 
     // Populate /apps
@@ -106,9 +106,17 @@ class VirtualFS {
     this.mkdir(norm, { hallucinated: true });
     // Populate plausible virtual content in the hallucinated folder
     const folderBase = path.posix.basename(norm);
-    this.tree.set(path.posix.join(norm, 'stratum.log'), {
+    const worldName = (this.world && this.world.name) ? this.world.name : 'LarpOS';
+    const worldTheme = (this.world && this.world.theme) ? this.world.theme : 'system environment';
+    this.tree.set(path.posix.join(norm, 'notes.txt'), {
       type: 'file',
-      content: `[RECONSTITUTED SECTOR ${folderBase.toUpperCase()}]\nPressure: nominal. Marrow density: shifting.`,
+      content: `[${worldName} - ${folderBase.toUpperCase()}]\nEnvironment: ${worldTheme}\nStatus: Active partition mounted.`,
+      mtime: 'Oct 08 04:00',
+      hallucinated: true
+    });
+    this.tree.set(path.posix.join(norm, 'README.txt'), {
+      type: 'file',
+      content: `Directory manifest for ${norm}.\nCreated within ${worldName}.`,
       mtime: 'Oct 08 04:00',
       hallucinated: true
     });
@@ -118,7 +126,7 @@ class VirtualFS {
       success: true,
       cwd: this.cwd,
       hallucinated: true,
-      out: `[SECTOR MATERIALIZED: ${norm}]`
+      out: `[DIRECTORY MATERIALIZED: ${norm}]`
     };
   }
 
@@ -203,7 +211,8 @@ class VirtualFS {
 
     // Hallucinate file content if in hallucinated directory
     if (this.cwd !== '/') {
-      const halluContent = `[RECONSTITUTED RECORD // ${binName.toUpperCase()}]\nThe text was recorded prior to the flood. It reads only: "Do not open the third valve."`;
+      const worldName = (this.world && this.world.name) ? this.world.name : 'LarpOS';
+      const halluContent = `[${worldName} - ${binName.toUpperCase()}]\nOperational records for ${binName}.\nStatus: Verified operational.`;
       this.tree.set(norm, { type: 'file', content: halluContent, mtime: 'Oct 08 04:00', hallucinated: true });
       return halluContent;
     }

@@ -71,7 +71,7 @@
     body.kiosk-disguised {
       user-select: none;
       -webkit-user-select: none;
-      cursor: default;
+      cursor: var(--cursor, default);
     }
 
     body.kiosk-disguised * {
@@ -1191,7 +1191,7 @@
  | |____ / ____ \| | \ \ | |    ____) |
  |______/_/    \_\_|  \_\|_|   |_____/ 
    L A R P   O P E R A T I N G   S Y S T E M
-   [ HALLUCINATED RUNTIME ARCHITECTURE // V3.2 ]
+   [ OPERATING SYSTEM RUNTIME ARCHITECTURE - V3.2 ]
       </pre>
 
       <div id="boot-log-container" class="boot-log-container"></div>
@@ -1443,6 +1443,11 @@
         if (tokens.motion.hoverMs !== undefined) root.style.setProperty('--motion-hover', `${tokens.motion.hoverMs}ms`);
         if (tokens.motion.pressMs !== undefined) root.style.setProperty('--motion-press', `${tokens.motion.pressMs}ms`);
         if (tokens.motion.blinkMs !== undefined) root.style.setProperty('--motion-blink', `${tokens.motion.blinkMs}ms`);
+      }
+
+      if (tokens.cursor) {
+        root.style.setProperty('--cursor', tokens.cursor);
+        document.body.style.cursor = tokens.cursor;
       }
     }
 
@@ -2024,7 +2029,7 @@
             <!-- Terminal Window -->
             <div id="terminal-window" class="gui-window" style="left: 140px; top: 40px; width: 620px; height: 420px; z-index: 10;">
               <div class="win-titlebar" id="terminal-titlebar">
-                <span class="win-title">TERMINAL // SUBSYSTEM</span>
+                <span class="win-title">TERMINAL SUBSYSTEM</span>
                 <div class="win-controls">
                   <button class="win-btn" onclick="toggleWindow('terminal-window')">_</button>
                 </div>
@@ -2106,7 +2111,7 @@
       const host = document.getElementById('paradigm-host');
       host.innerHTML = `
         <div class="tui-shell">
-          <div class="tui-border-top">┌───[ LARPOS // ${world.name} ]───${borderLine}┐</div>
+          <div class="tui-border-top">┌───[ LARPOS - ${world.name} ]───${borderLine}┐</div>
           <div class="tui-split-body">
             <div class="tui-left-col">
               <div style="font-weight:700; border-bottom:1px solid #38ef7d; padding-bottom:4px; margin-bottom:6px;">
@@ -2169,9 +2174,9 @@
           <div class="device-rack-top">
             <div>
               <div style="font-weight:700; color:var(--accent); font-size:13px; letter-spacing:0.05em;">
-                ${world.name} // INSTRUMENT CONSOLE
+                ${world.name} - INSTRUMENT CONSOLE
               </div>
-              <div style="font-size:11px; color:var(--dim);">KEEPER: ${world.keeper.name} // ${world.theme}</div>
+              <div style="font-size:11px; color:var(--dim);">SUPERVISOR: ${world.keeper.name} - ${world.theme}</div>
             </div>
             <div class="device-gauges-strip">
               ${gauge1}
@@ -2186,7 +2191,7 @@
             </div>
             <div class="device-crt-monitor" id="device-crt-monitor">
               <div style="font-size:11px; color:var(--accent); margin-bottom:6px; font-weight:700; border-bottom:1px solid #1f3647; padding-bottom:4px;">
-                CRT TELETYPE MONITOR // RECEPTACLE
+                CRT MONITOR
               </div>
               <div style="margin-bottom:8px; opacity:0.85; font-size:12px;">
                 ${monologueHtml}

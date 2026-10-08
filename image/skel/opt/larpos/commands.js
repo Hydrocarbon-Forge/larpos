@@ -87,7 +87,7 @@ class CommandSession {
     const text = (rawText || '').trim();
     if (!text) {
       return {
-        out: `${this.world.keeper.prefix}: "The silence is thick enough to carve with a knife. Speak, or the chamber forgets you."`
+        out: `${this.world.keeper.prefix}: "System ready. Enter an operational command or 'help' for instructions."`
       };
     }
 
@@ -120,14 +120,14 @@ class CommandSession {
       }
 
       const out = [
-        `[SYSTEM DISSONANCE: REBOOTING REALITY]`,
-        `${oldKeeper.prefix}: "The seal breaks. ${oldName} dissolves back into the dark."`,
+        `[REBOOTING SYSTEM]`,
+        `${oldKeeper.prefix}: "Dissolving ${oldName}. Restarting environment."`,
         `...`,
-        `[BOOT SEQUENCE INITIALIZED // SEED: ${newWorld.seed}]`,
+        `[BOOT SEQUENCE INITIALIZED - SEED: ${newWorld.seed}]`,
         `NAME: ${newWorld.name}`,
         `THEME: ${newWorld.theme}`,
         `CONCEPT: ${newWorld.concept}`,
-        `KEEPER: ${newWorld.keeper.name}`,
+        `SUPERVISOR: ${newWorld.keeper.name}`,
         `---`,
         ...newWorld.script
       ].join('\n');
@@ -151,8 +151,8 @@ class CommandSession {
     if (isHome) {
       const prevApp = this.currentApp;
       this.currentApp = null;
-      const appName = prevApp ? (prevApp.app ? prevApp.app.title : prevApp.title) : 'apparatus';
-      const out = `${this.world.keeper.prefix}: "You step back from the ${appName} and return to the central overview."`;
+      const appName = prevApp ? (prevApp.app ? prevApp.app.title : prevApp.title) : 'application';
+      const out = `${this.world.keeper.prefix}: "Closed ${appName}. Returned to system overview."`;
       this.recordCommand({ text, verb: 'home', out, failed: false });
       return { out, closeApp: true };
     }
@@ -219,9 +219,9 @@ class CommandSession {
         this.currentApp = targetEntity;
         const appScreen = interpretAppCombinatorial(this.world, targetEntity.name);
         const out = [
-          `[OPENING APPARATUS: ${appScreen.title}]`,
+          `[OPENING APPLICATION: ${appScreen.title}]`,
           appScreen.screen,
-          `${this.world.keeper.prefix}: "You stand before the ${appScreen.title}. Control: '${appScreen.element.label}' [action: ${appScreen.element.action}]. Return via '${this.world.homeVerb}'."`
+          `${this.world.keeper.prefix}: "Active application: ${appScreen.title}. Control: '${appScreen.element.label}' [action: ${appScreen.element.action}]. Return via '${this.world.homeVerb}'."`
         ].join('\n');
         this.recordCommand({ text, verb: 'open', entity: targetEntity.name, out, failed: false });
         return {
@@ -231,8 +231,8 @@ class CommandSession {
         };
       }
       if (!args) {
-        const appList = this.world.entities.map(e => `  - ${e.name} (${e.app ? e.app.title : e.title}) [${e.app ? e.app.format : 'gauge'}]`).join('\n');
-        const out = `${this.world.keeper.prefix}: "Which apparatus do you wish to ${verb}? Available catalog:\n${appList}\nUse '${verb} <name>'."`;
+        const appList = this.world.entities.map(e => `  - ${e.name} (${e.app ? e.app.title : e.title}) [${e.app ? e.app.format : 'app'}]`).join('\n');
+        const out = `${this.world.keeper.prefix}: "Which application do you wish to ${verb}? Available catalog:\n${appList}\nUse '${verb} <name>'."`;
         this.recordCommand({ text, verb: 'open', out, failed: false });
         return { out };
       }
@@ -247,7 +247,7 @@ class CommandSession {
 
       if (verb === actionName || lower === actionName || text.toLowerCase().includes(actionName) || (args && args.toLowerCase() === elemName)) {
         const responseText = (elem.responses && elem.responses[actionName]) || `You activate the ${elem.label || elem.name}. The mechanism responds.`;
-        const out = `${responseText}\n[STATUS: ENGAGED // ACTIVE TELEMETRY]`;
+        const out = `${responseText}\n[STATUS: ENGAGED - ACTIVE]`;
         this.recordCommand({ text, verb: actionName, entity: this.currentApp.name, out, failed: false });
         return {
           out,
@@ -281,11 +281,11 @@ class CommandSession {
       }
 
       const out = [
-        `[${this.world.name} // SYSTEM REGISTER]`,
+        `[${this.world.name} - SYSTEM OVERVIEW]`,
         `${this.world.keeper.name} presiding.`,
-        `Idiom: ${this.world.keeper.idiom}.`,
+        `Operational mode: ${this.world.keeper.idiom}.`,
         contextNote,
-        `SYSTEM LAWS:`,
+        `SYSTEM GUIDELINES:`,
         lawsList,
         ``,
         `GENERATED APPLICATIONS (OPEN VIA '${(this.world.openVerb || 'open').toUpperCase()} <name>'):`,
@@ -293,11 +293,11 @@ class CommandSession {
         ``,
         `OPERATIONAL VERBS:`,
         verbList,
-        `  - ${(this.world.openVerb || 'open').toUpperCase()} [app]: Open an apparatus into its running screen.`,
-        `  - ${(this.world.homeVerb || 'home').toUpperCase()}: Step back to the system overview.`,
-        `  - NEW WORLD / ${(this.world.reseedVerb || 'reseed').toUpperCase()}: Dissolve this world and return to concept prompt.`,
+        `  - ${(this.world.openVerb || 'open').toUpperCase()} [app]: Open an application into its workspace screen.`,
+        `  - ${(this.world.homeVerb || 'home').toUpperCase()}: Return to the system overview.`,
+        `  - NEW WORLD / ${(this.world.reseedVerb || 'reseed').toUpperCase()}: Restart with a new intent seed.`,
         ``,
-        `${this.world.keeper.prefix}: "Use the verbs as they are meant to be used. The system does not negotiate."`
+        `${this.world.keeper.prefix}: "Enter commands or verbs to interact with the environment."`
       ].filter(Boolean).join('\n');
 
       this.recordCommand({ text, verb, out, failed: false });
@@ -306,15 +306,15 @@ class CommandSession {
 
     // 6. System inquiries: "laws", "entities", "apps", "look"
     if (verb === 'laws') {
-      const lawsList = this.world.laws.map((l, i) => `  [Law ${i + 1}] ${l}`).join('\n');
-      const out = `${this.world.keeper.prefix}: "The operational laws of this station are binding:"\n${lawsList}`;
+      const lawsList = this.world.laws.map((l, i) => `  [Guideline ${i + 1}] ${l}`).join('\n');
+      const out = `${this.world.keeper.prefix}: "Core guidelines for this environment:"\n${lawsList}`;
       this.recordCommand({ text, verb, out, failed: false });
       return { out };
     }
 
     if (verb === 'entities' || verb === 'apps' || verb === 'manifest' || verb === 'things' || (verb === 'look' && !args) || (verb === 'ls' && !args)) {
       const appList = this.world.entities.map(e => `  * ${e.name} (${e.app ? e.app.title : e.title}): ${e.desc} [${e.app ? e.app.format : 'app'}]`).join('\n');
-      const out = `${this.world.keeper.prefix}: "These applications inhabit the immediate station:\n${appList}\nOpen any with '${this.world.openVerb || 'open'} <name>'."`;
+      const out = `${this.world.keeper.prefix}: "Applications active in this environment:\n${appList}\nOpen any with '${this.world.openVerb || 'open'} <name>'."`;
       this.recordCommand({ text, verb, out, failed: false });
       return { out };
     }
@@ -387,7 +387,7 @@ class CommandSession {
     }
 
     const validVerbNames = this.world.verbs.map(v => v.name).join(', ');
-    const out = `${this.world.keeper.prefix}: "I have no ear for '${text}'. This place only understands ${validVerbNames}, or '${this.world.helpVerb}' for instruction."`;
+    const out = `${this.world.keeper.prefix}: "Unrecognized input '${text}'. Available commands: ${validVerbNames}, or '${this.world.helpVerb}' for help."`;
     this.recordCommand({ text, verb, out, failed: true });
     return { out };
   }
@@ -442,14 +442,14 @@ class CommandSession {
       }
 
       const out = [
-        `[SYSTEM DISSONANCE: REBOOTING REALITY]`,
-        `${oldKeeper.prefix}: "The seal breaks. ${oldName} dissolves back into the dark."`,
+        `[REBOOTING SYSTEM]`,
+        `${oldKeeper.prefix}: "Dissolving ${oldName}. Restarting environment."`,
         `...`,
-        `[BOOT SEQUENCE INITIALIZED // SEED: ${newWorld.seed}]`,
+        `[BOOT SEQUENCE INITIALIZED - SEED: ${newWorld.seed}]`,
         `NAME: ${newWorld.name}`,
         `THEME: ${newWorld.theme}`,
         `CONCEPT: ${newWorld.concept}`,
-        `KEEPER: ${newWorld.keeper.name}`,
+        `SUPERVISOR: ${newWorld.keeper.name}`,
         `---`,
         ...newWorld.script
       ].join('\n');

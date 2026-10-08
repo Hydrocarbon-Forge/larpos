@@ -103,13 +103,13 @@ console.log('4. Testing intent seed & concept conditioning...');
 {
   const wSub = generateWorld(1, 'submarine');
   assert.strictEqual(wSub.concept, 'submarine', 'World concept must reflect input');
-  assert(wSub.theme.includes('submarine'), 'World theme must reflect concept string');
-  assert.strictEqual(wSub.archetypeId, 'brine_beacon', 'Submarine concept must steer to maritime archetype');
+  assert(wSub.theme.toLowerCase().includes('submarine'), 'World theme must reflect concept string');
+  assert(wSub.entities.some(e => e.name.includes('depth') || e.name.includes('sonar') || e.name.includes('ballast') || e.name.includes('chart') || e.name.includes('telemetry')), 'Submarine world must compose nautical/submarine apps');
 
   const wTrain = generateWorld(2, 'railway');
   assert.strictEqual(wTrain.concept, 'railway', 'World concept must reflect input');
-  assert(wTrain.theme.includes('railway'), 'World theme must reflect concept string');
-  assert.strictEqual(wTrain.archetypeId, 'ash_railway', 'Railway concept must steer to railway archetype');
+  assert(wTrain.theme.toLowerCase().includes('railway'), 'World theme must reflect concept string');
+  assert(wTrain.entities.some(e => e.name.includes('track') || e.name.includes('boiler') || e.name.includes('throttle') || e.name.includes('timetable') || e.name.includes('telegraph')), 'Railway world must compose railway apps');
 
   const wRand = generateWorld(3, 'random');
   assert.strictEqual(wRand.concept, 'random', 'Random concept produces random path');
@@ -237,9 +237,8 @@ console.log('8. Testing live application interpreter & damaged shell fallback...
 
   // Damaged app shell fallback check: broken/empty render falls back to generic shell, never white screen
   const damagedShell = createDamagedAppShell(world, 'corrupt-apparatus', '');
-  assert(damagedShell !== null, 'Damaged shell must never be null');
   assert.strictEqual(damagedShell.damaged, true, 'Damaged shell must be flagged as damaged');
-  assert(damagedShell.screen.includes('DAMAGED') || damagedShell.screen.includes('DECAY'), 'Damaged shell must frame failure in-world');
+  assert(damagedShell.screen.includes('UNREADABLE') || damagedShell.screen.includes('reduced fidelity') || damagedShell.screen.includes('DAMAGED'), 'Damaged shell must frame failure in-world');
   assert(damagedShell.element && damagedShell.element.name, 'Damaged shell must maintain interactive element');
   console.log(`  ✓ Damaged app shell fallback verified: "${damagedShell.title}" (never a white screen).`);
 }
@@ -463,24 +462,25 @@ console.log('9. Testing HTTP server endpoints...');
     assert(rootLs.includes('apps') && rootLs.includes('bin') && rootLs.includes('etc'), 'Virtual root must have default directories');
 
     // Deterministic commands: mkdir, echo, cat
-    vfs.mkdir('/test-stratum');
-    assert(vfs.ls().includes('test-stratum'), 'Created directory must appear in ls');
-    vfs.echo('PRESSURE=HIGH', '/test-stratum/readout.env');
-    assert.strictEqual(vfs.cat('/test-stratum/readout.env'), 'PRESSURE=HIGH', 'Virtual cat must return written content');
+    vfs.mkdir('/test-archive');
+    assert(vfs.ls().includes('test-archive'), 'Created directory must appear in ls');
+    vfs.echo('PARAM=ACTIVE', '/test-archive/readout.env');
+    assert.strictEqual(vfs.cat('/test-archive/readout.env'), 'PARAM=ACTIVE', 'Virtual cat must return written content');
 
     // Cat virtual configuration
     const lawsConf = vfs.cat('/etc/laws.conf');
     assert(lawsConf.includes('LAW_1'), 'Virtual /etc/laws.conf must be populated from world spec');
 
     // HALLUCINATION MECHANIC: cd into nonexistent directory materializes it
-    const halluRes = vfs.cd('/uncharted/void/stratum9');
+    const halluRes = vfs.cd('/uncharted/folder/archive9');
     assert.strictEqual(halluRes.hallucinated, true, 'cd into unknown path must hallucinate directory');
-    assert.strictEqual(vfs.pwd(), '/uncharted/void/stratum9', 'CWD must update to hallucinated directory');
+    assert.strictEqual(vfs.pwd(), '/uncharted/folder/archive9', 'CWD must update to hallucinated directory');
 
     const halluLs = vfs.ls();
-    assert(halluLs.includes('stratum.log'), 'Hallucinated directory must materialize virtual contents');
-    const stratumContent = vfs.cat('stratum.log');
-    assert(stratumContent.includes('RECONSTITUTED'), 'Hallucinated stratum.log must contain in-world fiction');
+    assert(halluLs.includes('notes.txt') || halluLs.includes('README.txt'), 'Hallucinated directory must materialize virtual contents');
+    const notesContent = vfs.cat('notes.txt');
+    assert(notesContent.includes(world.name) || notesContent.includes('Active partition'), 'Hallucinated notes.txt must contain world-derived content');
+    assert(!notesContent.includes('stratum.log') && !notesContent.includes('Marrow density'), 'Hallucinated content must not contain sci-fi stratum.log template');
 
     // Test shell commands via CommandSession
     const session = new CommandSession(world, { disableLLM: true });
@@ -793,13 +793,34 @@ console.log('9. Testing HTTP server endpoints...');
   // 19. Tone, Design Banks, Instantiators & Boot Serialization (§11, Acceptance Criterion 11)
   console.log('19. Testing §11 requirements: design bank pulls, determinism, practical desktop tone & boot queue...');
   {
-    // A. Practical concept tone & archetype steering
+    // A. Practical concept tone & neutral composition (Spec §12)
     const wPractical = generateWorld(1234, 'a highly practical and lightweight desktop operating system');
     assert.strictEqual(wPractical.archetypeId, 'practical_desktop', 'Concept must steer to practical_desktop archetype');
     assert.strictEqual(wPractical.interface, 'gui', 'Practical desktop must steer to gui interface');
     assert(wPractical.theme.toLowerCase().includes('desktop') || wPractical.theme.toLowerCase().includes('practical') || wPractical.theme.toLowerCase().includes('workstation'), 'Practical desktop theme must have normal computer/Linux texture');
     assert(wPractical.entities.some(e => e.name.includes('terminal') || e.name.includes('file') || e.name.includes('setting')), 'Practical desktop must include standard computer entities');
-    console.log(`  ✓ Practical desktop tone verified: "${wPractical.name}" [interface: ${wPractical.interface}, archetype: ${wPractical.archetypeId}]`);
+
+    // Spec §12 zero pre-baked content assertions
+    const serializedPractical = JSON.stringify(wPractical);
+    assert(!serializedPractical.includes('stratum.log'), 'Practical world must not contain stratum.log');
+    assert(!serializedPractical.includes('RECONSTITUTED'), 'Practical world must not contain RECONSTITUTED');
+    assert(!serializedPractical.includes(' // '), 'Practical world must not contain " // " separator');
+    assert(!serializedPractical.includes('dead_god_cranium'), 'Practical world must not contain dead_god_cranium');
+    assert(!serializedPractical.includes('ash_railway'), 'Practical world must not contain ash_railway');
+    assert(!serializedPractical.includes('compost_retort'), 'Practical world must not contain compost_retort');
+    assert(!serializedPractical.includes('trepan'), 'Practical world must not contain trepan');
+    assert(!serializedPractical.includes('ghost monitor'), 'Practical world must not contain ghost monitor');
+    assert(!serializedPractical.includes('Marrow density'), 'Practical world must not contain Marrow density');
+
+    // Two different seeds produce different world names and app sets
+    const wSeedA = generateWorld(101, 'a highly practical and lightweight desktop operating system');
+    const wSeedB = generateWorld(202, 'a highly practical and lightweight desktop operating system');
+    assert.notStrictEqual(wSeedA.name, wSeedB.name, 'Different seeds must produce different world names');
+    const appsA = wSeedA.entities.map(e => e.name).sort().join(',');
+    const appsB = wSeedB.entities.map(e => e.name).sort().join(',');
+    assert.notStrictEqual(appsA, appsB, 'Different seeds must produce different entity sets');
+
+    console.log(`  ✓ Practical desktop tone verified: "${wPractical.name}" [interface: ${wPractical.interface}, archetype: ${wPractical.archetypeId}] (zero pre-baked content verified).`);
 
     // B. Design Spec Determinism (same seed + concept => bit-for-bit identical spec)
     const spec1a = generateDesignSpec(1234, 'a highly practical and lightweight desktop operating system');

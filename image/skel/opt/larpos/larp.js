@@ -424,19 +424,19 @@ function parseLooseText(content) {
   }
 
   const keeper = {
-    name: 'The Sector Proctor',
-    personality: 'attentive and austere',
-    idiom: 'mechanical readings and structural endurance',
-    prefix: 'Proctor'
+    name: 'The System Supervisor',
+    personality: 'attentive and technical',
+    idiom: 'system readings and operational parameters',
+    prefix: 'Supervisor'
   };
 
-  const script = sentences.slice(0, 5).map(s => `[CHRONICLE]: "${s}"`);
+  const script = sentences.slice(0, 5).map(s => `[LOG]: "${s}"`);
 
   const verbs = [
-    { name: 'help', help: 'help — consult the world verbs and operational laws.' },
-    { name: 'open', help: 'open [app] — open an apparatus running screen.' },
-    { name: 'home', help: 'home — step back to the system overview.' },
-    { name: 'reseed', help: 'reseed — dissolve reality and return to concept prompt.' }
+    { name: 'help', help: 'help — consult the world verbs and operational guidelines.' },
+    { name: 'open', help: 'open [app] — open an application running screen.' },
+    { name: 'home', help: 'home — return to the system overview.' },
+    { name: 'reseed', help: 'reseed — reboot system and return to concept prompt.' }
   ];
 
   for (const b of binCommands) {
@@ -470,7 +470,7 @@ function parseLooseText(content) {
 function parseLarpSync(content) {
   const lines = String(content || '').split('\n').map(l => l.trim()).filter(Boolean);
   if (lines.length === 0) {
-    return parseLooseText('Void sector with no recorded transactions.');
+    return parseLooseText('Empty document buffer with no recorded definitions.');
   }
 
   // Check if content appears to be JSON lines
@@ -480,16 +480,16 @@ function parseLarpSync(content) {
   }
 
   let worldMeta = {
-    name: 'HALT-REALITY',
-    theme: 'an unparsed sector of the LarpOS document',
+    name: 'UNPARSED ENVIRONMENT',
+    theme: 'an unparsed document buffer',
     concept: 'random',
     interface: 'device',
     palette: ['#09131b', '#0f2537', '#4ecdc4', '#cbe3db', '#e07a5f'],
     keeper: {
-      name: 'The Clerk of Fragments',
-      personality: 'speaks in half-sentences',
-      idiom: 'torn ledgers and missing registers',
-      prefix: 'Clerk'
+      name: 'Document Interpreter',
+      personality: 'technical and direct',
+      idiom: 'document parser registers',
+      prefix: 'Parser'
     },
     seed: '0x00000000',
     openVerb: 'open',

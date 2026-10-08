@@ -394,6 +394,18 @@ function materialize(skeleton, seedVal, conceptInput = '', world = null) {
   const primaryFontStack = fonts.FONT_STACKS.sans_clean;
   const monoFontStack = fonts.FONT_STACKS.mono_code;
 
+  let cursor = 'default';
+  if (skeleton.paradigm === 'device') {
+    cursor = 'crosshair';
+  } else if (skeleton.paradigm === 'tui') {
+    cursor = 'text';
+  } else if (skeleton.paradigm === 'scene') {
+    cursor = 'crosshair';
+  } else {
+    const guiCursors = ['default', 'crosshair', 'pointer', 'cell'];
+    cursor = prng.choice(guiCursors);
+  }
+
   // Derive cohesive tokens
   const tokens = {
     color: {
@@ -410,6 +422,7 @@ function materialize(skeleton, seedVal, conceptInput = '', world = null) {
       danger: '#d06a5a',
       glow: basePalette.accent
     },
+    cursor,
     unit: 16,
     spacing: [8, 16, 24, 32],
     radiusPx,

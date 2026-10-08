@@ -186,8 +186,8 @@ function normalizeBlock(spec, defaultId = 'block-0') {
       palette: { fill: 'surface', label: 'text', border: 'danger' },
       hooks: {},
       damaged: true,
-      title: 'DAMAGED CASING',
-      body: 'Internal linkage severed; block envelope could not be materialized.'
+      title: 'SECTION UNREADABLE',
+      body: 'Section unreadable; block envelope could not be materialized.'
     };
   }
 
