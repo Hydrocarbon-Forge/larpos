@@ -264,28 +264,34 @@ held by the AI:
   behavior, not a real binary. New commands "in local bin" = larpscript
   entries the world (or the keeper) can add during play.
 
-### 8. The Larp script is a FILE FORMAT: `.larp` (Nathan, 2026-10-08)
+### 8. The Larp script is a FILE: `.larp` — loose text, AI-interpreted (Nathan, 2026-10-08)
 
-The OS is *defined by Larp script files*:
+The OS is *defined by Larp script files*. Correction from the user (2026-10-08):
+**`.larp` is NOT a laid-out file format.** There is no required schema. The point
+of `.larp` is that you can write *whatever* and the AI interprets it.
 
-- Format: a structured text document (JSON-lines or tagged plain text — pick
-  one, document it in `app/larp.md`) where each top-level entry is a
-  **section**: `world` (name/theme/palette/keeper/laws/interface), `app`
-  (title/idiom/interactive element(s)/behavior sketch), `bin` (command
-  name/behavior), `scene` (opening monologue), `law` (system law). One
-  `.larp` file per boot = the entire OS.
-- Boot writes the boot's world to `<state dir>/world-<seed>.larp` (and keeps
-  the last N). The engine *reads the .larp file* as its source of truth — the
-  app catalog, bin commands, and laws are parsed from it, not from in-memory
-  objects. Apps are therefore "each in a larp script file" (or the section
-  within the boot file — document which you choose; the file on disk is the
-  truth).
-- **Live rewriting (item 5):** the engine watches for edits to the active
-  `.larp` file (mtime poll or fs.watch where available) and re-parses on
-  change — so the OS literally rewrites itself live: edit the file (by hand,
-  by the keeper, by another process) and the running OS changes shape. The
-  in-world "rewrite" verb can also append/patch sections through the LLM.
-  Corrupt edits are interpreted, not rejected (reader-not-validator).
+- A `.larp` file is a loose text document — prose, fragments, half-finished
+  things, whatever. It MAY contain structure (a title line, an app description,
+  a law, a command name) when that makes interpretation easier, but structure is
+  optional and non-normative. **The parser is the interpreter, not a regex** —
+  the reader-not-validator policy (§5) applies to the file itself: a section that
+  reads like an app becomes an app; a garbled chunk becomes a damaged law; a
+  command-ish line becomes a bin command. Nothing is rejected.
+- Boot writes the boot's world to `<state dir>/world-<seed>.larp` (and keeps the
+  last N). The running OS's source of truth is that file, read through the
+  interpreter — so the app catalog, bin commands, laws, and scene are whatever
+  the interpreter understands from the file, not fields of a schema.
+- **Live rewriting (item 5):** the engine watches for edits to the active `.larp`
+  file (fs.watch where available, mtime poll fallback) and re-interprets on
+  change — so the OS literally rewrites itself live: edit the file (by hand, by
+  the keeper, by another process) and the running OS changes shape. The in-world
+  "rewrite" verb can also append/patch through the LLM. Corrupt edits are
+  interpreted, not rejected — a broken section is in-world damage, never a parse
+  error.
+- Practical note for the engine: the LLM-generated boot file naturally has some
+  shape (a name, an app list, laws) because the generator knows what a world
+  needs — but that's a *generator* convenience, not a format contract. Hand-edited
+  files can be anything, including just a paragraph.
 
 ### 9. The kiosk disguise: no browser, ever (Nathan, 2026-10-08)
 
@@ -336,9 +342,11 @@ Once booted, there is **no way to see it's a browser** (item 6):
    filesystem held in the LLM context; hallucinated folders materialize; binary
    slot resolves real files; conversation JSONL persisted per boot; minimal-thinking
    LLM prompting keeps it sub-second-feeling, combinatorial echo fallback offline.
-9. `.larp` file format: boot writes `world-<seed>.larp`, engine parses it as
-   source of truth; file edits re-parse live (OS rewrites itself); bin commands are
-   `.larp` entries interpreted at run time.
+9. `.larp` files: loose text, AI-interpreted — no required schema (write whatever,
+   the interpreter makes it an OS). Boot writes `world-<seed>.larp`; the running OS
+   reads it through the interpreter as its source of truth; file edits re-interpret
+   live (OS rewrites itself); bin commands are `.larp`-interpreted entries run at
+   runtime. A hand-edited `.larp` that is just a paragraph still yields a world.
 10. Post-boot disguise: global key/click capture, right-click and browser shortcuts
     blocked, no URL/tab/scrollbar cues, in-world `Esc`. Selftest verifies the
     handlers exist and the suppressed shortcuts fire no browser behavior.
