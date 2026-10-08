@@ -5,9 +5,9 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { generateWorld } = require('./world');
+const { generateWorld, interpretAppCombinatorial } = require('./world');
 const { CommandSession } = require('./commands');
-const { getLLMBase, generateWorldWithLLM } = require('./llm');
+const { getLLMBase, generateWorldWithLLM, interpretAppWithLLM } = require('./llm');
 
 function parseCliArgs() {
   let seed = process.env.LARPOS_SEED;
@@ -38,12 +38,39 @@ function parseCliArgs() {
   return { seed, port, disableLLM, llmBase };
 }
 
+function serializeWorld(world) {
+  return {
+    name: world.name,
+    theme: world.theme,
+    concept: world.concept || 'random',
+    palette: world.palette,
+    keeper: world.keeper,
+    entities: world.entities.map(e => ({
+      name: e.name,
+      title: e.title,
+      kind: e.kind,
+      desc: e.desc,
+      reachVerbs: e.reachVerbs,
+      app: e.app
+    })),
+    laws: world.laws,
+    verbs: world.verbs,
+    script: world.script,
+    seed: world.seed,
+    openVerb: world.openVerb || 'open',
+    homeVerb: world.homeVerb || 'home',
+    helpVerb: world.helpVerb || 'help',
+    reseedVerb: world.reseedVerb || 'reseed',
+    source: world.isLLM ? 'llm' : 'combinatorial'
+  };
+}
+
 function createServer(initialSeed, port = 8080, options = {}) {
   const disableLLM = !!options.disableLLM;
   const llmBase = options.llmBase || getLLMBase();
 
   // Baseline fallback world
-  let activeWorld = options.initialWorld || generateWorld(initialSeed);
+  let activeWorld = options.initialWorld || generateWorld(initialSeed, options.concept);
 
   const session = new CommandSession(activeWorld, {
     disableLLM,
@@ -87,30 +114,145 @@ function createServer(initialSeed, port = 8080, options = {}) {
     }
 
     if (req.method === 'GET' && pathname === '/api/world') {
-      const publicWorld = {
-        name: activeWorld.name,
-        theme: activeWorld.theme,
-        palette: activeWorld.palette,
-        keeper: activeWorld.keeper,
-        entities: activeWorld.entities.map(e => ({
-          name: e.name,
-          title: e.title,
-          kind: e.kind,
-          desc: e.desc,
-          reachVerbs: e.reachVerbs
-        })),
-        laws: activeWorld.laws,
-        verbs: activeWorld.verbs,
-        script: activeWorld.script,
-        seed: activeWorld.seed,
-        source: activeWorld.isLLM ? 'llm' : 'combinatorial'
-      };
-
+      const publicWorld = serializeWorld(activeWorld);
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-cache'
       });
       res.end(JSON.stringify(publicWorld, null, 2));
+      return;
+    }
+
+    // Pre-boot boot endpoint: POST /api/boot or POST /api/world with { concept, seed }
+    if (req.method === 'POST' && (pathname === '/api/boot' || pathname === '/api/world')) {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+        if (body.length > 65536) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Payload too large' }));
+          req.destroy();
+        }
+      });
+
+      req.on('end', async () => {
+        let concept = 'random';
+        let seed = ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
+        try {
+          if (body.trim().startsWith('{')) {
+            const parsed = JSON.parse(body);
+            if (parsed.concept) concept = parsed.concept;
+            if (parsed.seed !== undefined) seed = parsed.seed;
+          }
+        } catch (_) {}
+
+        let newWorld = null;
+        if (!disableLLM && process.env.LLM_DISABLED !== '1') {
+          try {
+            newWorld = await generateWorldWithLLM(seed, { concept, llmBase, timeout: 25000 });
+          } catch (_) {}
+        }
+        if (!newWorld) {
+          newWorld = generateWorld(seed, concept);
+        }
+
+        activeWorld = newWorld;
+        session.setWorld(newWorld);
+
+        const publicWorld = serializeWorld(activeWorld);
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify(publicWorld, null, 2));
+      });
+      return;
+    }
+
+    // Live App Interpreter endpoint: POST /api/app/open or POST /api/interpret
+    if (req.method === 'POST' && (pathname === '/api/app/open' || pathname === '/api/interpret')) {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+        if (body.length > 65536) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Payload too large' }));
+          req.destroy();
+        }
+      });
+
+      req.on('end', async () => {
+        let entityName = '';
+        try {
+          if (body.trim().startsWith('{')) {
+            const parsed = JSON.parse(body);
+            entityName = parsed.entity || parsed.app || '';
+          } else {
+            entityName = body.trim();
+          }
+        } catch (_) {
+          entityName = body.trim();
+        }
+
+        const appScreen = await interpretAppWithLLM(activeWorld, entityName, {
+          llmBase,
+          disableLLM
+        });
+
+        // Track open app in session
+        const entity = activeWorld.entities.find(e => e.name === appScreen.entityName);
+        if (entity) {
+          session.currentApp = entity;
+        }
+
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify(appScreen, null, 2));
+      });
+      return;
+    }
+
+    // App interaction endpoint: POST /api/app/interact
+    if (req.method === 'POST' && pathname === '/api/app/interact') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+        if (body.length > 65536) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Payload too large' }));
+          req.destroy();
+        }
+      });
+
+      req.on('end', async () => {
+        let entityName = '';
+        let action = '';
+        try {
+          if (body.trim().startsWith('{')) {
+            const parsed = JSON.parse(body);
+            entityName = parsed.entity || '';
+            action = parsed.action || '';
+          }
+        } catch (_) {}
+
+        const entity = activeWorld.entities.find(e => e.name === entityName) || session.currentApp;
+        if (entity) {
+          session.currentApp = entity;
+        }
+
+        const result = await session.execute(action || 'operate');
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify({
+          out: result.out,
+          appUpdated: true,
+          elementState: 'engaged'
+        }));
+      });
       return;
     }
 
@@ -142,27 +284,16 @@ function createServer(initialSeed, port = 8080, options = {}) {
         const payload = {
           out: result.out,
           reseeded: !!result.reseeded,
+          returnToConcept: !!result.returnToConcept,
+          openApp: result.openApp || null,
+          app: result.app || null,
+          closeApp: !!result.closeApp,
+          appUpdated: !!result.appUpdated,
+          elementState: result.elementState || null,
           seed: activeWorld.seed
         };
         if (result.reseeded && result.world) {
-          payload.world = {
-            name: result.world.name,
-            theme: result.world.theme,
-            palette: result.world.palette,
-            keeper: result.world.keeper,
-            entities: result.world.entities.map(e => ({
-              name: e.name,
-              title: e.title,
-              kind: e.kind,
-              desc: e.desc,
-              reachVerbs: e.reachVerbs
-            })),
-            laws: result.world.laws,
-            verbs: result.world.verbs,
-            script: result.world.script,
-            seed: result.world.seed,
-            source: result.world.isLLM ? 'llm' : 'combinatorial'
-          };
+          payload.world = serializeWorld(result.world);
         }
 
         res.writeHead(200, {
@@ -203,6 +334,7 @@ async function createServerAsync(initialSeed, port = 8080, options = {}) {
   if (!disableLLM) {
     try {
       initialWorld = await generateWorldWithLLM(initialSeed, {
+        concept: options.concept,
         llmBase,
         timeout: 25000
       });
@@ -215,7 +347,7 @@ async function createServerAsync(initialSeed, port = 8080, options = {}) {
   }
 
   if (!initialWorld) {
-    initialWorld = generateWorld(initialSeed);
+    initialWorld = generateWorld(initialSeed, options.concept);
   }
 
   return createServer(initialSeed, port, {
@@ -237,6 +369,7 @@ if (require.main === module) {
       const world = app.getWorld();
       console.log(`[LarpOS] World Engine online at http://0.0.0.0:${port}/`);
       console.log(`[LarpOS] Active Reality: "${world.name}" [source: ${world.isLLM ? 'LLM' : 'combinatorial'}]`);
+      console.log(`[LarpOS] Concept: "${world.concept}"`);
       console.log(`[LarpOS] Seed: ${world.seed}`);
       console.log(`[LarpOS] Resident Keeper: ${world.keeper.name}`);
     });
@@ -246,5 +379,6 @@ if (require.main === module) {
 module.exports = {
   createServer,
   createServerAsync,
-  parseCliArgs
+  parseCliArgs,
+  serializeWorld
 };

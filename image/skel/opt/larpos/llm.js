@@ -4,7 +4,7 @@
 
 const http = require('http');
 const { PRNG } = require('./prng');
-const { generateWorld } = require('./world');
+const { generateWorld, interpretAppCombinatorial, createDamagedAppShell } = require('./world');
 
 function getLLMBase() {
   return process.env.LLM_BASE || 'http://192.168.1.72:8080';
@@ -149,8 +149,12 @@ function defaultCommandFallback(world, rawText) {
 }
 
 async function generateWorldWithLLM(seedInput, options = {}) {
-  // Always prepare deterministic fallback for the exact same seed
-  const fallback = generateWorld(seedInput);
+  const concept = (options.concept && String(options.concept).trim().toLowerCase() !== 'random')
+    ? String(options.concept).trim()
+    : 'random';
+
+  // Always prepare deterministic fallback for the exact same seed & concept
+  const fallback = generateWorld(seedInput, concept);
 
   if (options.disableLLM || process.env.LLM_DISABLED === '1') {
     return fallback;
@@ -167,32 +171,61 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     const prng = new PRNG(seedInput);
     const hexSeed = prng.hexSeed;
 
+    const conceptInstruction = concept !== 'random'
+      ? `INTENT SEED / CONCEPT: "${concept}". The entire world MUST be deeply shaped by this idea. The theme, keeper, laws, entities (and their app scripts) must all be about "${concept}".`
+      : 'INTENT SEED / CONCEPT: (none - generate a strange, original hallucinated reality).';
+
     const systemPrompt = [
       'You are the world engine for LarpOS, an operating system that is an eerie, hallucinated reality.',
-      'You must generate an inhabited, strange, coherent world spec based on the given seed.',
+      'You must generate an inhabited, strange, coherent world spec based on the given seed and concept prompt.',
+      conceptInstruction,
+      'Every entity in the system is also an openable application written into the Larp script.',
       'Respond ONLY with a single raw JSON object matching the required schema.',
       'Do not wrap in markdown code blocks. No commentary before or after.',
       'Schema requirements:',
       '- name: string (e.g. "STATION NINE // GLASS REACHES" or "CAR-04 // LINE OF ASH")',
-      '- theme: string (evocative one-line genre/setting description)',
+      '- theme: string (evocative one-line genre/setting description reflecting the concept)',
+      '- concept: string (normalized short concept string)',
       '- palette: array of 4-5 CSS hex colors suited to the atmosphere (e.g. ["#09131b", "#0f2537", "#4ecdc4", "#cbe3db", "#e07a5f"])',
       '- keeper: object with { name: string, personality: string, idiom: string, prefix: string }',
-      '- entities: array of 4-6 objects with { name: string (slug), title: string, kind: string, desc: string, reachVerbs: array of strings, responses: object mapping verb to 1-3 lines of tactile fiction }',
+      '- entities: array of 4-6 objects with {',
+      '    name: string (slug),',
+      '    title: string,',
+      '    kind: string,',
+      '    desc: string,',
+      '    reachVerbs: array of strings,',
+      '    responses: object mapping verb to 1-3 lines of tactile fiction,',
+      '    app: {',
+      '      title: string (app title in world idiom),',
+      '      format: string (physical metaphor: e.g. gauge, mirror, filing-cabinet, mouth, valve, dial, lever, loom, retort),',
+      '      screen: string (full-viewport running scene description in 2-4 evocative sentences),',
+      '      element: {',
+      '        name: string (slug for control),',
+      '        label: string (action label for user button/control),',
+      '        type: string (one of: "dial", "valve", "lever", "toggle", "slider", "button", "aperture"),',
+      '        state: string (initial physical state),',
+      '        action: string (primary interaction verb),',
+      '        responses: object mapping action to evocative in-world outcome',
+      '      }',
+      '    }',
+      '  }',
       '- laws: array of 2-4 strange, specific system laws',
-      '- verbs: array of 5-7 objects with { name: string, help: string }',
+      '- verbs: array of 5-8 objects with { name: string, help: string }',
       '- script: array of 3-6 lines of opening monologue / boot telemetry in keeper voice',
       '- helpVerb: string (the world-specific verb for help)',
-      '- reseedVerb: string (the world-specific verb for rebooting/reseeding)'
+      '- reseedVerb: string (the world-specific verb for rebooting/reseeding)',
+      '- openVerb: string (the world-specific verb for opening an app, e.g. "unveil", "trepan", "board", "unfold")',
+      '- homeVerb: string (the world-specific verb for returning to the overview, e.g. "watch", "vault", "berth", "selvedge")'
     ].join('\n');
 
-    const userPrompt = `Generate a completely coherent, original LarpOS world for SEED: ${hexSeed}. Make it read as inhabited fiction with tactile consistency.`;
+    const userPrompt = `Generate a completely coherent, original LarpOS world for SEED: ${hexSeed}. Concept: "${concept}". Make it read as inhabited fiction with tactile consistency.`;
 
     const rawOutput = await chatCompletion(baseUrl, model, [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], {
       temperature: 0.75,
-      max_tokens: 2400,
+      max_tokens: 2800,
       timeout: options.timeout || 35000
     });
 
@@ -237,6 +270,16 @@ async function generateWorldWithLLM(seedInput, options = {}) {
 
     const helpVerb = (parsed.helpVerb || (verbs[0] && verbs[0].name) || 'help').toLowerCase();
     const reseedVerb = (parsed.reseedVerb || (verbs[verbs.length - 1] && verbs[verbs.length - 1].name) || 'reseed').toLowerCase();
+    const openVerb = (parsed.openVerb || 'open').toLowerCase();
+    const homeVerb = (parsed.homeVerb || 'home').toLowerCase();
+
+    // Ensure openVerb and homeVerb exist in verbs list
+    if (!verbs.some(v => v.name === openVerb)) {
+      verbs.push({ name: openVerb, help: `${openVerb} [app] — open an apparatus and enter its running screen.` });
+    }
+    if (!verbs.some(v => v.name === homeVerb)) {
+      verbs.push({ name: homeVerb, help: `${homeVerb} — step back from the running apparatus to the system overview.` });
+    }
 
     const entities = parsed.entities.map(e => {
       const slug = (e.name || e.id || e.title || 'entity').toLowerCase().replace(/[^a-z0-9\-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -256,19 +299,65 @@ async function generateWorldWithLLM(seedInput, options = {}) {
         }
       }
 
+      // App normalization
+      let app = e.app;
+      if (!app || typeof app !== 'object') {
+        app = {
+          title: `${title.toUpperCase()} INTERFACE`,
+          format: 'gauge',
+          screen: desc,
+          element: {
+            name: `${slug}-control`,
+            label: `Operate ${title}`,
+            type: 'dial',
+            state: 'primed',
+            action: reachVerbs[0] || 'turn',
+            responses: { [reachVerbs[0] || 'turn']: `You operate the ${title}. ${desc}` }
+          }
+        };
+      }
+
+      const appElem = (app.element && typeof app.element === 'object') ? {
+        name: app.element.name || `${slug}-control`,
+        label: app.element.label || `Operate ${title}`,
+        type: ['dial', 'valve', 'lever', 'toggle', 'slider', 'button', 'aperture'].includes(app.element.type) ? app.element.type : 'button',
+        state: app.element.state || 'ready',
+        action: app.element.action || reachVerbs[0] || 'operate',
+        responses: app.element.responses && typeof app.element.responses === 'object' ? app.element.responses : {
+          [app.element.action || reachVerbs[0] || 'operate']: `You activate the ${title}.`
+        }
+      } : {
+        name: `${slug}-control`,
+        label: `Operate ${title}`,
+        type: 'button',
+        state: 'ready',
+        action: reachVerbs[0] || 'operate',
+        responses: { [reachVerbs[0] || 'operate']: `You activate the ${title}.` }
+      };
+
+      const normalizedApp = {
+        title: app.title || `${title.toUpperCase()} INTERFACE`,
+        format: app.format || 'gauge',
+        screen: app.screen || desc,
+        element: appElem,
+        elements: [appElem]
+      };
+
       return {
         name: slug || 'entity',
         title,
         kind: e.kind || 'inhabited thing',
         desc,
         reachVerbs,
-        responses
+        responses,
+        app: normalizedApp
       };
     });
 
     return {
       name: parsed.name.trim(),
       theme: parsed.theme.trim(),
+      concept: parsed.concept || concept,
       palette,
       keeper: {
         name: keeper.name,
@@ -283,10 +372,137 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       seed: hexSeed,
       helpVerb,
       reseedVerb,
+      openVerb,
+      homeVerb,
       isLLM: true
     };
   } catch (_) {
     // Catch ANY failure (network error, timeout, unparsable JSON) and return combinatorial fallback
+    return fallback;
+  }
+}
+
+async function interpretAppWithLLM(world, entityQuery, options = {}) {
+  const clean = String(entityQuery || '').toLowerCase().trim();
+  const entity = (world && world.entities ? world.entities.find(e =>
+    e.name.toLowerCase() === clean ||
+    (e.title && e.title.toLowerCase() === clean) ||
+    (e.aliases && e.aliases.some(a => a.toLowerCase() === clean))
+  ) : null) || (world && world.entities ? world.entities[0] : null);
+
+  if (!entity) {
+    return createDamagedAppShell(world, entityQuery, 'Entity not found');
+  }
+
+  // Combinatorial fallback for this app
+  const fallback = interpretAppCombinatorial(world, entity.name);
+
+  if (options.disableLLM || process.env.LLM_DISABLED === '1') {
+    return fallback;
+  }
+
+  const baseUrl = options.llmBase || getLLMBase();
+
+  try {
+    const model = await getModelName(baseUrl, options.probeTimeout || 1500);
+    if (!model) {
+      return fallback;
+    }
+
+    const systemPrompt = [
+      'You are the LarpOS live application interpreter.',
+      'The Larp script is the whole OS as a document; you instantiate an app script section live at open time.',
+      'Interpretation policy:',
+      'You are a reader, not a validator. The Larp script is made up by the AI, so there is no ground truth a line could be wrong against.',
+      'Interpret the app script and its physical idiom subjectively into a live, running tactile screen.',
+      `World: "${world.name}"`,
+      `Theme: "${world.theme}"`,
+      `Keeper: ${world.keeper.name} (${world.keeper.idiom})`,
+      `Palette: ${world.palette.join(', ')}`,
+      '',
+      'Respond ONLY with a single raw JSON object matching this schema:',
+      '{',
+      '  "title": string (title of the app),',
+      '  "format": string (physical metaphor: gauge, mirror, filing-cabinet, mouth, valve, dial, lever, etc.),',
+      '  "screen": string (full-viewport running scene description in the world idiom in 2-4 evocative sentences),',
+      '  "statusLine": string (one-line telemetry readout in the world idiom),',
+      '  "element": {',
+      '    "name": string (control slug),',
+      '    "label": string (imperative action label),',
+      '    "type": string (one of: "dial", "valve", "lever", "toggle", "slider", "button", "aperture"),',
+      '    "state": string (current physical state),',
+      '    "action": string (primary verb),',
+      '    "responses": {',
+      '      "<action>": string (evocative in-world outcome)',
+      '    }',
+      '  }',
+      '}'
+    ].join('\n');
+
+    const appSpec = entity.app || {
+      title: entity.title.toUpperCase(),
+      format: 'gauge',
+      screen: entity.desc,
+      element: {
+        name: `${entity.name}-control`,
+        label: `Operate ${entity.title}`,
+        type: 'button',
+        state: 'ready',
+        action: 'operate',
+        responses: { operate: 'The mechanism moves.' }
+      }
+    };
+
+    const userPrompt = [
+      `Instantiate this app script live into a running screen:`,
+      `Entity: ${entity.name} (${entity.title})`,
+      `Kind: ${entity.kind}`,
+      `Format: ${appSpec.format}`,
+      `Script: ${appSpec.screen}`,
+      `Base Control: ${JSON.stringify(appSpec.element)}`
+    ].join('\n');
+
+    const rawOutput = await chatCompletion(baseUrl, model, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], {
+      temperature: 0.75,
+      max_tokens: 1200,
+      timeout: options.timeout || 12000
+    });
+
+    const parsed = extractJSON(rawOutput);
+
+    // If unparsable or empty, check if we need the damaged app shell fallback
+    if (!parsed || !parsed.screen || !parsed.element || !parsed.element.name) {
+      return createDamagedAppShell(world, entity.name, rawOutput || '');
+    }
+
+    const elem = {
+      name: parsed.element.name || `${entity.name}-control`,
+      label: parsed.element.label || `Operate ${entity.title}`,
+      type: ['dial', 'valve', 'lever', 'toggle', 'slider', 'button', 'aperture'].includes(parsed.element.type) ? parsed.element.type : 'button',
+      state: parsed.element.state || 'primed',
+      action: parsed.element.action || 'engage',
+      responses: (parsed.element.responses && typeof parsed.element.responses === 'object') ? parsed.element.responses : {
+        [parsed.element.action || 'engage']: 'The apparatus hums with dark electricity.'
+      },
+      currentValue: parsed.element.state || 'primed'
+    };
+
+    return {
+      entityName: entity.name,
+      title: parsed.title || appSpec.title || entity.title.toUpperCase(),
+      format: parsed.format || appSpec.format || 'gauge',
+      screen: parsed.screen,
+      statusLine: parsed.statusLine || `[${world.name} // ${parsed.format ? parsed.format.toUpperCase() : 'APPARATUS'}]`,
+      element: elem,
+      elements: [elem],
+      palette: world.palette,
+      isLLM: true
+    };
+  } catch (_) {
+    // On transport failure, return combinatorial fallback so the kiosk never hangs
     return fallback;
   }
 }
@@ -318,12 +534,12 @@ async function generateCommandResponseWithLLM(world, text, history = [], options
       `Your idiom: ${keeper.idiom}. Speaker prefix: ${keeper.prefix}.`,
       `Station Laws: ${lawsStr}.`,
       `Known Entities: ${entitiesStr}.`,
-      `Known Verbs: ${verbsStr}. Help verb is "${world.helpVerb}". Reseed verb is "${world.reseedVerb}".`,
+      `Known Verbs: ${verbsStr}. Help verb is "${world.helpVerb}". Reseed verb is "${world.reseedVerb}". Open verb is "${world.openVerb}". Home verb is "${world.homeVerb}".`,
       `Instructions:`,
       `- Respond strictly in character as ${keeper.prefix}.`,
       `- Keep responses concise: 1 to 3 evocative sentences.`,
       `- Never break character. You are NOT an AI assistant, you are the keeper of this world.`,
-      `- If the user interacts with an entity, describe the uncanny result in tactile detail.`,
+      `- If the user interacts with an entity or app, describe the uncanny result in tactile detail.`,
       `- If the command is unrecognized, react in-character with your idiom (do NOT say "command not found").`,
       `- If the user asks for help or says "${world.helpVerb}", guide them in character using your available verbs.`
     ].join('\n');
@@ -361,5 +577,6 @@ module.exports = {
   getModelName,
   chatCompletion,
   generateWorldWithLLM,
+  interpretAppWithLLM,
   generateCommandResponseWithLLM
 };

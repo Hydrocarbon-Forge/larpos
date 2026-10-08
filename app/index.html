@@ -38,6 +38,7 @@
       width: 100vw;
       background: radial-gradient(ellipse at center, var(--surface) 0%, var(--bg) 100%);
       transition: background 0.6s ease, color 0.4s ease;
+      position: relative;
     }
 
     header {
@@ -46,7 +47,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: rgba(0, 0, 0, 0.4);
+      background: rgba(0, 0, 0, 0.45);
       flex-shrink: 0;
       letter-spacing: 0.05em;
     }
@@ -56,31 +57,148 @@
       color: var(--accent);
       text-transform: uppercase;
       font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .header-keeper {
       font-size: 12px;
       color: var(--fg);
-      opacity: 0.8;
+      opacity: 0.85;
     }
 
-    main {
+    .nav-btn {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 4px 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.2s ease;
+    }
+    .nav-btn:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* Screen Views */
+    .view-container {
       flex: 1;
-      overflow-y: auto;
-      padding: 18px 20px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      overflow-y: auto;
       scrollbar-width: thin;
       scrollbar-color: var(--accent) var(--bg);
+    }
+
+    /* 1. CONCEPT SCREEN */
+    #view-concept {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 30px 20px;
+      text-align: center;
+    }
+
+    .concept-card {
+      max-width: 640px;
+      width: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--accent);
+      box-shadow: 0 0 25px rgba(0, 0, 0, 0.7);
+      padding: 32px 28px;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .concept-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .concept-subtitle {
+      font-size: 13px;
+      color: var(--fg);
+      opacity: 0.8;
+      line-height: 1.6;
+    }
+
+    .concept-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    #concept-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--accent);
+      padding: 12px 14px;
+      color: var(--fg);
+      font-family: var(--font-mono);
+      font-size: 16px;
+      outline: none;
+      caret-color: var(--accent);
+      border-radius: 2px;
+    }
+    #concept-input:focus {
+      background: rgba(255, 255, 255, 0.09);
+      box-shadow: 0 0 10px var(--accent);
+    }
+
+    .concept-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    .btn-action {
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.05em;
+      transition: all 0.2s ease;
+    }
+    .btn-action:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-action.btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-action.btn-primary:hover {
+      filter: brightness(1.15);
+    }
+
+    /* 2. OVERVIEW SCREEN */
+    #view-overview {
+      padding: 18px 20px;
+      gap: 16px;
     }
 
     .scene-box {
       border-left: 3px solid var(--accent);
       padding: 12px 16px;
-      background: rgba(0, 0, 0, 0.25);
+      background: rgba(0, 0, 0, 0.3);
       border-radius: 0 4px 4px 0;
-      margin-bottom: 6px;
     }
 
     .scene-theme {
@@ -96,11 +214,108 @@
       word-break: break-word;
     }
 
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-label::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .apps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .app-card {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+      transition: border 0.2s, background 0.2s;
+    }
+    .app-card:hover {
+      border-color: var(--accent);
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    .app-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .app-card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--fg);
+      letter-spacing: 0.04em;
+    }
+
+    .app-card-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 2px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .app-card-desc {
+      font-size: 12px;
+      opacity: 0.8;
+      line-height: 1.4;
+      flex: 1;
+    }
+
+    .app-card-btn {
+      align-self: flex-start;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 2px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.2s ease;
+    }
+    .app-card-btn:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .log-entries {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
     .log-entry {
       display: flex;
       flex-direction: column;
       gap: 4px;
-      margin-top: 6px;
     }
 
     .log-command {
@@ -109,8 +324,8 @@
       gap: 8px;
       color: var(--accent);
       font-weight: 600;
+      font-size: 14px;
     }
-
     .log-command::before {
       content: "›";
       color: var(--dim);
@@ -124,11 +339,269 @@
       word-break: break-word;
       color: var(--fg);
       line-height: 1.6;
+      font-size: 14px;
     }
 
+    /* 3. APP SCREEN */
+    #view-app {
+      padding: 20px;
+      gap: 16px;
+    }
+
+    .app-screen-container {
+      border: 1px solid var(--accent);
+      background: rgba(0, 0, 0, 0.4);
+      padding: 20px;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .app-status-bar {
+      font-size: 12px;
+      color: var(--accent);
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+      padding-bottom: 8px;
+      letter-spacing: 0.06em;
+    }
+
+    .app-scene-prose {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--fg);
+      background: rgba(0, 0, 0, 0.25);
+      padding: 14px 18px;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* Styled Interactive Hardware Controls */
+    .app-hardware-bay {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 24px;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      min-height: 180px;
+    }
+
+    .control-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .control-state-badge {
+      font-size: 11px;
+      color: var(--dim);
+      border: 1px solid var(--dim);
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+
+    /* Physical Control Elements */
+    .ctrl-widget {
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.15s ease, filter 0.2s ease;
+    }
+    .ctrl-widget:hover {
+      filter: brightness(1.2);
+    }
+    .ctrl-widget:active {
+      transform: scale(0.96);
+    }
+
+    /* Dial */
+    .widget-dial {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--surface) 60%, rgba(0,0,0,0.8) 100%);
+      border: 4px solid var(--accent);
+      box-shadow: 0 0 15px rgba(0,0,0,0.8), inset 0 0 10px rgba(0,0,0,0.6);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .widget-dial-pointer {
+      width: 4px;
+      height: 38px;
+      background: var(--dim);
+      position: absolute;
+      top: 12px;
+      transform-origin: 50% 38px;
+      border-radius: 2px;
+      box-shadow: 0 0 6px var(--dim);
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .widget-dial-center {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      z-index: 2;
+    }
+
+    /* Valve Wheel */
+    .widget-valve {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      border: 7px solid var(--accent);
+      background: rgba(0,0,0,0.4);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 18px rgba(0,0,0,0.7);
+      transition: transform 0.5s ease;
+    }
+    .widget-valve-spoke {
+      position: absolute;
+      width: 6px;
+      height: 100%;
+      background: var(--accent);
+    }
+    .widget-valve-spoke.spoke-2 { transform: rotate(60deg); }
+    .widget-valve-spoke.spoke-3 { transform: rotate(120deg); }
+    .widget-valve-hub {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--dim);
+      z-index: 3;
+      box-shadow: 0 0 8px rgba(0,0,0,0.9);
+    }
+
+    /* Lever */
+    .widget-lever-box {
+      width: 80px;
+      height: 120px;
+      background: rgba(0,0,0,0.6);
+      border: 2px solid var(--accent);
+      border-radius: 4px;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .widget-lever-slot {
+      width: 12px;
+      height: 90px;
+      background: rgba(0,0,0,0.9);
+      border-radius: 6px;
+      position: relative;
+    }
+    .widget-lever-handle {
+      width: 34px;
+      height: 26px;
+      background: var(--dim);
+      border: 2px solid var(--fg);
+      border-radius: 3px;
+      position: absolute;
+      left: -11px;
+      top: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.8);
+      transition: top 0.3s cubic-bezier(0.2, 0.8, 0.4, 1);
+    }
+    .widget-lever-handle.pulled {
+      top: 54px;
+      background: var(--accent);
+    }
+
+    /* Toggle Rocker */
+    .widget-toggle {
+      width: 60px;
+      height: 90px;
+      background: rgba(0,0,0,0.7);
+      border: 2px solid var(--accent);
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .widget-toggle-half {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--fg);
+      opacity: 0.4;
+      transition: all 0.2s;
+    }
+    .widget-toggle-half.active {
+      background: var(--accent);
+      color: var(--bg);
+      opacity: 1;
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.5);
+    }
+
+    /* Heavy Button */
+    .widget-button {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--accent) 40%, var(--surface) 100%);
+      border: 4px solid var(--fg);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--bg);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Iris Aperture */
+    .widget-aperture {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 3px solid var(--accent);
+      background: rgba(0,0,0,0.8);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .widget-aperture-core {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      background: var(--dim);
+      box-shadow: 0 0 14px var(--dim);
+      transition: all 0.4s ease;
+    }
+
+    /* Feedback text */
+    .app-feedback-box {
+      min-height: 48px;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.3);
+      border-left: 2px solid var(--dim);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--fg);
+    }
+
+    /* Bottom Command Bar */
     .command-bar {
       padding: 12px 16px;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.55);
       border-top: 1px solid rgba(255, 255, 255, 0.1);
       display: flex;
       align-items: center;
@@ -153,12 +626,12 @@
       font-size: 15px;
       caret-color: var(--accent);
     }
-
     #cmd-input::placeholder {
       color: var(--fg);
       opacity: 0.35;
     }
 
+    /* Footer */
     footer {
       padding: 6px 16px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -166,7 +639,7 @@
       display: flex;
       justify-content: space-between;
       color: var(--dim);
-      background: rgba(0, 0, 0, 0.6);
+      background: rgba(0, 0, 0, 0.65);
       flex-shrink: 0;
       letter-spacing: 0.04em;
     }
@@ -174,6 +647,9 @@
     .footer-left {
       display: flex;
       gap: 16px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .action-badge {
@@ -190,19 +666,77 @@
 <body>
   <div id="app">
     <header>
-      <div id="world-name" class="header-title">INITIALIZING TELEMETRY...</div>
-      <div id="world-keeper" class="header-keeper"></div>
+      <div id="header-title" class="header-title">
+        <span id="title-text">LARPOS</span>
+      </div>
+      <div class="header-right">
+        <span id="header-keeper" class="header-keeper"></span>
+        <button id="btn-header-home" class="nav-btn" style="display:none; margin-left: 10px;">← OVERVIEW</button>
+      </div>
     </header>
 
-    <main id="terminal">
+    <!-- VIEW 1: PRE-BOOT CONCEPT SCREEN -->
+    <main id="view-concept" class="view-container">
+      <div class="concept-card">
+        <div class="concept-title">What should this OS be?</div>
+        <div class="concept-subtitle">
+          The entire operating system is a hallucinated document. Enter an intent seed to condition reality, or initialize at random.
+        </div>
+        <div class="concept-input-group">
+          <input
+            type="text"
+            id="concept-input"
+            placeholder="e.g. Victorian submarine, dead god cranium, orbital garden, ash railway..."
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="concept-actions">
+          <button id="btn-concept-boot" class="btn-action btn-primary">ENTER REALITY</button>
+          <button id="btn-concept-random" class="btn-action">RANDOM</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- VIEW 2: OVERVIEW SCREEN (Keeper + Apps Catalog + Terminal) -->
+    <main id="view-overview" class="view-container" style="display:none;">
       <div id="scene-container" class="scene-box">
         <div id="scene-theme" class="scene-theme">Connecting to station...</div>
         <div id="scene-content"></div>
       </div>
-      <div id="log-entries"></div>
+
+      <div class="section-label">INHABITED APPLICATIONS</div>
+      <div id="apps-catalog" class="apps-grid"></div>
+
+      <div class="section-label">TERMINAL EXCHANGE</div>
+      <div id="log-entries" class="log-entries"></div>
     </main>
 
-    <div class="command-bar">
+    <!-- VIEW 3: LIVE-INTERPRETED APP SCREEN -->
+    <main id="view-app" class="view-container" style="display:none;">
+      <div class="app-screen-container">
+        <div id="app-status-bar" class="app-status-bar">STATUS: LIVE // APPARATUS ACTIVE</div>
+        <div id="app-scene-prose" class="app-scene-prose"></div>
+
+        <div class="app-hardware-bay">
+          <div id="control-label" class="control-label">INTERACTIVE CONTROL</div>
+          <div id="control-state" class="control-state-badge">STATE: CALIBRATED</div>
+          <div id="hardware-control-slot"></div>
+        </div>
+
+        <div id="app-feedback" class="app-feedback-box">Awaiting physical input...</div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <button id="btn-app-return" class="btn-action">← RETURN TO OVERVIEW</button>
+          <span id="app-control-hint" style="font-size:11px; color:var(--dim);">Click control or type verb below</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- BOTTOM COMMAND BAR -->
+    <div id="command-bar" class="command-bar">
       <span id="prompt-label" class="prompt-label">›</span>
       <input
         type="text"
@@ -215,9 +749,11 @@
       />
     </div>
 
+    <!-- FOOTER -->
     <footer>
       <div class="footer-left">
         <span id="footer-world">LARPOS</span>
+        <span id="footer-concept">CONCEPT: NONE</span>
         <span id="footer-seed">SEED: 0x00000000</span>
       </div>
       <div class="footer-right">
@@ -225,27 +761,44 @@
         &nbsp;|&nbsp;
         <span class="action-badge" onclick="submitCommand('laws')">LAWS</span>
         &nbsp;|&nbsp;
-        <span class="action-badge" onclick="submitCommand('new world')">NEW BOOT</span>
+        <span class="action-badge" onclick="returnToConceptScreen()">NEW BOOT</span>
       </div>
     </footer>
   </div>
 
   <script>
     let currentWorld = null;
+    let currentApp = null;
+    let activeView = 'concept'; // 'concept' | 'overview' | 'app'
     const history = [];
     let historyIndex = -1;
 
     const dom = {
-      name: document.getElementById('world-name'),
-      keeper: document.getElementById('world-keeper'),
-      theme: document.getElementById('scene-theme'),
-      scene: document.getElementById('scene-content'),
-      entries: document.getElementById('log-entries'),
-      input: document.getElementById('cmd-input'),
-      prompt: document.getElementById('prompt-label'),
+      titleText: document.getElementById('title-text'),
+      headerKeeper: document.getElementById('header-keeper'),
+      btnHeaderHome: document.getElementById('btn-header-home'),
+      viewConcept: document.getElementById('view-concept'),
+      viewOverview: document.getElementById('view-overview'),
+      viewApp: document.getElementById('view-app'),
+      conceptInput: document.getElementById('concept-input'),
+      btnConceptBoot: document.getElementById('btn-concept-boot'),
+      btnConceptRandom: document.getElementById('btn-concept-random'),
+      sceneTheme: document.getElementById('scene-theme'),
+      sceneContent: document.getElementById('scene-content'),
+      appsCatalog: document.getElementById('apps-catalog'),
+      logEntries: document.getElementById('log-entries'),
+      appStatusBar: document.getElementById('app-status-bar'),
+      appSceneProse: document.getElementById('app-scene-prose'),
+      controlLabel: document.getElementById('control-label'),
+      controlState: document.getElementById('control-state'),
+      controlSlot: document.getElementById('hardware-control-slot'),
+      appFeedback: document.getElementById('app-feedback'),
+      btnAppReturn: document.getElementById('btn-app-return'),
+      promptLabel: document.getElementById('prompt-label'),
+      cmdInput: document.getElementById('cmd-input'),
       footerWorld: document.getElementById('footer-world'),
-      footerSeed: document.getElementById('footer-seed'),
-      main: document.getElementById('terminal')
+      footerConcept: document.getElementById('footer-concept'),
+      footerSeed: document.getElementById('footer-seed')
     };
 
     function applyPalette(palette) {
@@ -258,41 +811,267 @@
       root.style.setProperty('--dim', palette[4] || palette[2]);
     }
 
+    function switchView(viewName) {
+      activeView = viewName;
+      dom.viewConcept.style.display = (viewName === 'concept') ? 'flex' : 'none';
+      dom.viewOverview.style.display = (viewName === 'overview') ? 'flex' : 'none';
+      dom.viewApp.style.display = (viewName === 'app') ? 'flex' : 'none';
+
+      if (viewName === 'app') {
+        dom.btnHeaderHome.style.display = 'inline-block';
+        dom.btnHeaderHome.textContent = '← ' + ((currentWorld && currentWorld.homeVerb) ? currentWorld.homeVerb.toUpperCase() : 'HOME');
+      } else {
+        dom.btnHeaderHome.style.display = 'none';
+      }
+
+      if (viewName === 'concept') {
+        dom.conceptInput.focus();
+      } else {
+        dom.cmdInput.focus();
+      }
+    }
+
+    function returnToConceptScreen() {
+      currentApp = null;
+      switchView('concept');
+    }
+
+    async function bootWithConcept(conceptText) {
+      dom.titleText.textContent = 'INITIALIZING REALITY...';
+      try {
+        const res = await fetch('/api/boot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ concept: conceptText || 'random' })
+        });
+        const worldData = await res.json();
+        renderWorld(worldData);
+        switchView('overview');
+      } catch (err) {
+        console.error(err);
+        dom.titleText.textContent = 'BOOT FAILED';
+      }
+    }
+
     function renderWorld(world) {
       currentWorld = world;
       document.title = world.name + ' — LarpOS';
       applyPalette(world.palette);
 
-      dom.name.textContent = world.name;
-      dom.keeper.textContent = world.keeper.name;
-      dom.theme.textContent = world.theme;
+      dom.titleText.textContent = world.name;
+      dom.headerKeeper.textContent = world.keeper.name;
+      dom.sceneTheme.textContent = world.theme;
       dom.footerWorld.textContent = world.name;
+      dom.footerConcept.textContent = 'CONCEPT: ' + (world.concept || 'random');
       dom.footerSeed.textContent = 'SEED: ' + world.seed;
 
-      dom.prompt.textContent = (world.keeper.prefix || 'SYSTEM') + ' ›';
+      dom.promptLabel.textContent = (world.keeper.prefix || 'SYSTEM') + ' ›';
 
-      dom.scene.innerHTML = '';
+      // Render Opening Scene Monologue
+      dom.sceneContent.innerHTML = '';
       if (Array.isArray(world.script)) {
         world.script.forEach(line => {
           const el = document.createElement('div');
           el.className = 'scene-line';
           el.textContent = line;
-          dom.scene.appendChild(el);
+          dom.sceneContent.appendChild(el);
         });
       }
 
-      dom.input.focus();
+      // Render Apps Catalog Cards
+      dom.appsCatalog.innerHTML = '';
+      if (Array.isArray(world.entities)) {
+        world.entities.forEach(ent => {
+          const card = document.createElement('div');
+          card.className = 'app-card';
+
+          const header = document.createElement('div');
+          header.className = 'app-card-header';
+
+          const title = document.createElement('div');
+          title.className = 'app-card-title';
+          title.textContent = (ent.app && ent.app.title) ? ent.app.title : ent.title;
+
+          const badge = document.createElement('div');
+          badge.className = 'app-card-badge';
+          badge.textContent = (ent.app && ent.app.format) ? ent.app.format : 'apparatus';
+
+          header.appendChild(title);
+          header.appendChild(badge);
+
+          const desc = document.createElement('div');
+          desc.className = 'app-card-desc';
+          desc.textContent = ent.desc;
+
+          const btn = document.createElement('button');
+          btn.className = 'app-card-btn';
+          const openWord = (world.openVerb || 'open').toUpperCase();
+          btn.textContent = `${openWord} [${ent.name}]`;
+          btn.onclick = () => openApp(ent.name);
+
+          card.appendChild(header);
+          card.appendChild(desc);
+          card.appendChild(btn);
+          dom.appsCatalog.appendChild(card);
+        });
+      }
     }
 
-    async function loadWorld() {
+    // Open App: Layer 2 live interpretation
+    async function openApp(entityName) {
+      dom.titleText.textContent = 'INTERPRETING APPARATUS...';
       try {
-        const res = await fetch('/api/world');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        renderWorld(data);
+        const res = await fetch('/api/app/open', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entity: entityName })
+        });
+        const appData = await res.json();
+        renderAppScreen(appData);
+        switchView('app');
       } catch (err) {
-        dom.theme.textContent = 'Signal lost. Failed to load world telemetry.';
         console.error(err);
+      }
+    }
+
+    function renderAppScreen(app) {
+      currentApp = app;
+      dom.titleText.textContent = `APP: ${app.title} [${(app.format || 'apparatus').toUpperCase()}]`;
+      dom.appStatusBar.textContent = app.statusLine || `STATUS: ENGAGED // FORMAT: ${(app.format || 'gauge').toUpperCase()}`;
+      dom.appSceneProse.textContent = app.screen;
+
+      const elem = app.element || {
+        name: 'control',
+        label: 'Operate Mechanism',
+        type: 'button',
+        state: 'ready',
+        action: 'operate',
+        responses: { operate: 'The mechanism moves.' }
+      };
+
+      dom.controlLabel.textContent = elem.label || 'PHYSICAL CONTROL';
+      dom.controlState.textContent = 'STATE: ' + (elem.state || 'ENGAGED').toUpperCase();
+      dom.appFeedback.textContent = 'Standing before the ' + app.title + '. Activate control to trigger in-world consequence.';
+
+      // Render physical control widget
+      dom.controlSlot.innerHTML = '';
+      const ctrlType = elem.type || 'dial';
+
+      if (ctrlType === 'dial') {
+        const dial = document.createElement('div');
+        dial.className = 'widget-dial ctrl-widget';
+        dial.title = 'Click to turn dial';
+        const pointer = document.createElement('div');
+        pointer.className = 'widget-dial-pointer';
+        const center = document.createElement('div');
+        center.className = 'widget-dial-center';
+        dial.appendChild(pointer);
+        dial.appendChild(center);
+        let deg = 45;
+        dial.onclick = () => {
+          deg = (deg + 90) % 360;
+          pointer.style.transform = `rotate(${deg}deg)`;
+          triggerAppAction(elem.action || 'turn');
+        };
+        dom.controlSlot.appendChild(dial);
+      } else if (ctrlType === 'valve') {
+        const valve = document.createElement('div');
+        valve.className = 'widget-valve ctrl-widget';
+        valve.title = 'Click to rotate valve';
+        for (let i = 1; i <= 3; i++) {
+          const spoke = document.createElement('div');
+          spoke.className = `widget-valve-spoke spoke-${i}`;
+          valve.appendChild(spoke);
+        }
+        const hub = document.createElement('div');
+        hub.className = 'widget-valve-hub';
+        valve.appendChild(hub);
+        let rot = 0;
+        valve.onclick = () => {
+          rot += 120;
+          valve.style.transform = `rotate(${rot}deg)`;
+          triggerAppAction(elem.action || 'turn');
+        };
+        dom.controlSlot.appendChild(valve);
+      } else if (ctrlType === 'lever') {
+        const box = document.createElement('div');
+        box.className = 'widget-lever-box ctrl-widget';
+        box.title = 'Click to throw lever';
+        const slot = document.createElement('div');
+        slot.className = 'widget-lever-slot';
+        const handle = document.createElement('div');
+        handle.className = 'widget-lever-handle';
+        slot.appendChild(handle);
+        box.appendChild(slot);
+        let pulled = false;
+        box.onclick = () => {
+          pulled = !pulled;
+          handle.className = pulled ? 'widget-lever-handle pulled' : 'widget-lever-handle';
+          triggerAppAction(elem.action || 'pull');
+        };
+        dom.controlSlot.appendChild(box);
+      } else if (ctrlType === 'toggle') {
+        const toggle = document.createElement('div');
+        toggle.className = 'widget-toggle ctrl-widget';
+        toggle.title = 'Click to flip toggle';
+        const top = document.createElement('div');
+        top.className = 'widget-toggle-half active';
+        top.textContent = 'ON';
+        const bot = document.createElement('div');
+        bot.className = 'widget-toggle-half';
+        bot.textContent = 'OFF';
+        toggle.appendChild(top);
+        toggle.appendChild(bot);
+        let isOn = true;
+        toggle.onclick = () => {
+          isOn = !isOn;
+          top.className = isOn ? 'widget-toggle-half active' : 'widget-toggle-half';
+          bot.className = !isOn ? 'widget-toggle-half active' : 'widget-toggle-half';
+          triggerAppAction(elem.action || 'flip');
+        };
+        dom.controlSlot.appendChild(toggle);
+      } else if (ctrlType === 'aperture') {
+        const ap = document.createElement('div');
+        ap.className = 'widget-aperture ctrl-widget';
+        ap.title = 'Click to adjust aperture';
+        const core = document.createElement('div');
+        core.className = 'widget-aperture-core';
+        ap.appendChild(core);
+        let wide = false;
+        ap.onclick = () => {
+          wide = !wide;
+          core.style.width = wide ? '60px' : '25px';
+          core.style.height = wide ? '60px' : '25px';
+          triggerAppAction(elem.action || 'open');
+        };
+        dom.controlSlot.appendChild(ap);
+      } else {
+        // Heavy Button default
+        const btn = document.createElement('div');
+        btn.className = 'widget-button ctrl-widget';
+        btn.textContent = elem.action || 'PRESS';
+        btn.title = 'Click to depress';
+        btn.onclick = () => triggerAppAction(elem.action || 'depress');
+        dom.controlSlot.appendChild(btn);
+      }
+    }
+
+    async function triggerAppAction(actionName) {
+      if (!currentApp) return;
+      try {
+        const res = await fetch('/api/app/interact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entity: currentApp.entityName,
+            action: actionName
+          })
+        });
+        const data = await res.json();
+        dom.appFeedback.textContent = data.out || 'The apparatus shifts and settles.';
+        dom.controlState.textContent = 'STATE: ENGAGED';
+      } catch (err) {
+        dom.appFeedback.textContent = 'MECHANICAL FAILURE: ' + err.message;
       }
     }
 
@@ -310,9 +1089,9 @@
 
       entry.appendChild(cmdEl);
       entry.appendChild(respEl);
-      dom.entries.appendChild(entry);
+      dom.logEntries.appendChild(entry);
 
-      dom.main.scrollTop = dom.main.scrollHeight;
+      dom.viewOverview.scrollTop = dom.viewOverview.scrollHeight;
     }
 
     async function submitCommand(text) {
@@ -321,7 +1100,7 @@
 
       history.push(cmd);
       historyIndex = history.length;
-      dom.input.value = '';
+      dom.cmdInput.value = '';
 
       try {
         const res = await fetch('/api/command', {
@@ -331,50 +1110,96 @@
         });
         const data = await res.json();
 
-        appendExchange(cmd, data.out || '(No response received)');
-
-        if (data.reseeded && data.world) {
-          renderWorld(data.world);
-          dom.entries.innerHTML = '';
-        } else if (data.reseeded) {
-          loadWorld();
-          dom.entries.innerHTML = '';
+        // Reseed returns to concept screen
+        if (data.returnToConcept || data.reseeded) {
+          returnToConceptScreen();
+          return;
         }
+
+        // Open app via command
+        if (data.openApp && data.app) {
+          renderAppScreen(data.app);
+          switchView('app');
+          return;
+        }
+
+        // Close app via command
+        if (data.closeApp) {
+          currentApp = null;
+          dom.titleText.textContent = currentWorld.name;
+          switchView('overview');
+          appendExchange(cmd, data.out || 'Returned to overview.');
+          return;
+        }
+
+        // Inside app mode
+        if (activeView === 'app') {
+          dom.appFeedback.textContent = data.out || 'Action executed.';
+          return;
+        }
+
+        // Overview terminal mode
+        appendExchange(cmd, data.out || '(No response received)');
       } catch (err) {
-        appendExchange(cmd, 'TRANSMISSION FAILURE: ' + err.message);
+        if (activeView === 'overview') {
+          appendExchange(cmd, 'TRANSMISSION FAILURE: ' + err.message);
+        } else {
+          dom.appFeedback.textContent = 'TRANSMISSION FAILURE: ' + err.message;
+        }
       }
     }
 
-    dom.input.addEventListener('keydown', (e) => {
+    // Concept Screen Event Listeners
+    dom.btnConceptBoot.onclick = () => {
+      bootWithConcept(dom.conceptInput.value.trim());
+    };
+    dom.btnConceptRandom.onclick = () => {
+      bootWithConcept('random');
+    };
+    dom.conceptInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        submitCommand(dom.input.value);
+        bootWithConcept(dom.conceptInput.value.trim());
+      }
+    });
+
+    // App Navigation Listeners
+    dom.btnHeaderHome.onclick = () => {
+      currentApp = null;
+      dom.titleText.textContent = currentWorld ? currentWorld.name : 'LARPOS';
+      switchView('overview');
+    };
+    dom.btnAppReturn.onclick = () => {
+      currentApp = null;
+      dom.titleText.textContent = currentWorld ? currentWorld.name : 'LARPOS';
+      switchView('overview');
+    };
+
+    // Terminal Input Event Listener
+    dom.cmdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitCommand(dom.cmdInput.value);
       } else if (e.key === 'ArrowUp') {
         if (history.length > 0 && historyIndex > 0) {
           historyIndex--;
-          dom.input.value = history[historyIndex] || '';
+          dom.cmdInput.value = history[historyIndex] || '';
           e.preventDefault();
         }
       } else if (e.key === 'ArrowDown') {
         if (historyIndex < history.length - 1) {
           historyIndex++;
-          dom.input.value = history[historyIndex] || '';
+          dom.cmdInput.value = history[historyIndex] || '';
         } else {
           historyIndex = history.length;
-          dom.input.value = '';
+          dom.cmdInput.value = '';
         }
         e.preventDefault();
       }
     });
 
-    // Auto-focus on click anywhere
-    document.addEventListener('click', (e) => {
-      if (!window.getSelection().toString()) {
-        dom.input.focus();
-      }
-    });
-
-    loadWorld();
+    // Start on Concept Screen
+    switchView('concept');
   </script>
 </body>
 </html>

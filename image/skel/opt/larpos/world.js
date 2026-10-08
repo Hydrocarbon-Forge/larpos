@@ -2,6 +2,810 @@
 
 const { PRNG } = require('./prng');
 
+const ENTITY_APPS = {
+  // 1. brine_beacon
+  'mercury-phial': {
+    title: 'QUICKSILVER SOUNDING COLUMN',
+    format: 'gauge',
+    screen: 'A four-foot column of cold green glass encased in perforated brass. A thick meniscus of oxidized mercury pulses inside, responding to unseen seismic swells seventy fathoms below the frozen sea.',
+    element: {
+      name: 'quicksilver-petcock',
+      label: 'Bleed Hydrographic Petcock',
+      type: 'valve',
+      state: 'seated',
+      action: 'turn',
+      responses: {
+        turn: 'You turn the knurled valve one-quarter turn. A hiss of chilled sea-gas escapes, and the mercury surges upward to mark the frozen depth: FORTY-ONE FATHOMS.'
+      }
+    }
+  },
+  'sounding-lead': {
+    title: 'DEEP-SHEAVE SOUNDING REGISTER',
+    format: 'register',
+    screen: 'A cast-iron spool holding coiled hemp line, dripping cold brine onto the floorboards. Barnacle-crusted tallies click against a brass pawl as the lead weight tests the silent abyss.',
+    element: {
+      name: 'pawl-release',
+      label: 'Trip Pawl Release Lever',
+      type: 'lever',
+      state: 'locked',
+      action: 'pull',
+      responses: {
+        pull: 'You pull the counterweighted iron lever. The drum spins with a harsh shriek; five fathoms of tarred hemp scream into the dark before the pawl catches with a violent thud.'
+      }
+    }
+  },
+  'prism-housing': {
+    title: 'FRESNEL BULLSEYE OPTIC',
+    format: 'mirror',
+    screen: 'Eight tiers of hand-ground bulls-eye glass revolving on a ring of mercury. The dying yellow lamp reflects across countless concentric rings, casting geometric spokes of brilliance across the green ice outside.',
+    element: {
+      name: 'mantle-regulator',
+      label: 'Adjust Mantle Draft Louver',
+      type: 'dial',
+      state: 'half-open',
+      action: 'turn',
+      responses: {
+        turn: 'You rotate the knurled brass dial. The tallow flame flares incandescent white inside the prism cage, throwing sharp diamond shadows against the stone vault.'
+      }
+    }
+  },
+  'drowned-bell': {
+    title: 'SUBMERGED FOG RESONATOR',
+    format: 'mouth',
+    screen: 'An acoustic copper funnel bolted to the sea-intake grate. Submerged twenty feet beneath the ice, the green-bronze bell rings muffled chords that reverberate directly into your sternum.',
+    element: {
+      name: 'acoustic-shutter',
+      label: 'Open Sea-Acoustic Shutter',
+      type: 'aperture',
+      state: 'constricted',
+      action: 'open',
+      responses: {
+        open: 'You pull the iris ring open. A deafening, low bronze rumble rushes up the pipe, carrying the smell of crushed kelp and icy fathoms.'
+      }
+    }
+  },
+  'logbook-folio-42': {
+    title: 'ADMIRALTY BRINE LEDGER',
+    format: 'filing-cabinet',
+    screen: 'A brass desk cradle holding the swollen calfskin logbook. The parchment pages are crusted with salt crystals that crackle like glass beneath your fingertips.',
+    element: {
+      name: 'folio-hasp',
+      label: 'Unclasp Folio Seal',
+      type: 'toggle',
+      state: 'latched',
+      action: 'flip',
+      responses: {
+        flip: 'You flip the corroded iron toggle. The parchment springs open to reveal fresh purple gall notes: "Tide ceased at 0300. The sea has taken the bells."'
+      }
+    }
+  },
+  'tallow-trough': {
+    title: 'WHALE-TALLOW FEED HOPPER',
+    format: 'valve',
+    screen: 'A wide copper reservoir filled with solid amber tallow, heated from beneath by steam coils. Thick droplets of liquefied fat drip through a glass sight-tube toward the burner chamber.',
+    element: {
+      name: 'feed-piston',
+      label: 'Advance Tallow Feed Ram',
+      type: 'slider',
+      state: 'notch-2',
+      action: 'slide',
+      responses: {
+        slide: 'You force the brass slider along its notched guide. The piston compresses the tallow slab; a warm wave of roasted marrow vapor fills the air as the burner hums louder.'
+      }
+    }
+  },
+
+  // 2. dead_god_cranium
+  'suture-omega': {
+    title: 'CORONAL SUTURE MANOMETER',
+    format: 'gauge',
+    screen: 'An ivory bridge spanning the jagged cranial seam. Dial indicators tipped with silver needles register minute expansions in the celestial bone as pressure builds in the parietal lobes.',
+    element: {
+      name: 'suture-relief-cock',
+      label: 'Vent Suture Relief Cock',
+      type: 'valve',
+      state: 'closed',
+      action: 'turn',
+      responses: {
+        turn: 'You turn the bone petcock. A fine mist of amber cerebrospinal steam whistles out; the needle dials shudder backward three increments.'
+      }
+    }
+  },
+  'ivory-stylus': {
+    title: 'ULNA TELEMETRY GALVANOMETER',
+    format: 'register',
+    screen: 'A carved bone stylus suspended by silver wire over a disc of smoked glass. The needle twitches with tiny galvanic spasms, tracing the dormant thoughts of the seraph.',
+    element: {
+      name: 'galvanic-key',
+      label: 'Depress Galvanic Contact Key',
+      type: 'button',
+      state: 'grounded',
+      action: 'depress',
+      responses: {
+        depress: 'You press the ivory button down. A sharp spark leaps from the needle to your knuckle, and the stylus scratches an eight-pointed star onto the soot.'
+      }
+    }
+  },
+  'dura-cistern': {
+    title: 'CEREBROSPINAL SIPHON',
+    format: 'mouth',
+    screen: 'A lead-lined basin sunk into the floor where cold spinal fluid pools. A copper suction pipe draws the bitter amber liquid through fine mesh filters for liturgical distribution.',
+    element: {
+      name: 'siphon-treadle',
+      label: 'Depress Cistern Siphon Treadle',
+      type: 'lever',
+      state: 'idle',
+      action: 'pull',
+      responses: {
+        pull: 'You throw the heavy copper treadle lever. The suction pump groans; clear golden fluid cascades into the receiving chalice, smelling of cedar and bitter almonds.'
+      }
+    }
+  },
+  'trepan-drill': {
+    title: 'SURGICAL TREPAN BRACE',
+    format: 'aperture',
+    screen: 'A heavy cast-steel trepan brace mounted to an articulated iron arm over the cranial plate. Serrated saw-teeth gleam beneath a coat of sterile mutton grease.',
+    element: {
+      name: 'brace-crank',
+      label: 'Rotate Trepan Crown Crank',
+      type: 'dial',
+      state: 'retracted',
+      action: 'turn',
+      responses: {
+        turn: 'You crank the wooden handle two full turns. The crown bit bites into the fossilized ivory with a dry, rhythmic crunch; powdered bone dust puffs out like confectioner\'s sugar.'
+      }
+    }
+  },
+  'ossified-psalm': {
+    title: 'DURA-MATER PSALM REGISTER',
+    format: 'filing-cabinet',
+    screen: 'A slate frame holding stretched parchment-like dura tissue. Silver pins driven through specific syllables cause faint harmonic hums to echo through the vault.',
+    element: {
+      name: 'resonance-pin',
+      label: 'Advance Liturgical Pin Array',
+      type: 'slider',
+      state: 'verse-IV',
+      action: 'slide',
+      responses: {
+        slide: 'You shift the pin array forward one notch. The stretched membrane vibrates with an eerie choir chord that lingers in the bone marrow of your shins.'
+      }
+    }
+  },
+  'optic-chasm': {
+    title: 'OPTIC CANAL MIRROR',
+    format: 'mirror',
+    screen: 'A polished speculum angled down the immense optic tunnel. Deep within the petrified nerve canal, faint celestial after-images drift across the dark like phosphorescent jellyfish.',
+    element: {
+      name: 'speculum-gimbal',
+      label: 'Pivot Speculum Iris Aperture',
+      type: 'aperture',
+      state: 'focused',
+      action: 'open',
+      responses: {
+        open: 'You expand the brass iris ring. The darkness deep within the optic tunnel flashes blinding violet; for an instant you see a field of burning wheels.'
+      }
+    }
+  },
+
+  // 3. ash_railway
+  'frosted-pane': {
+    title: 'PERMAFROST OBSERVATION TURRET',
+    format: 'mirror',
+    screen: 'A reinforced bevel-edge carriage window coated with three inches of crystalline rime. Outside, the black tundra drifts past under the emerald twitching of the northern aurora.',
+    element: {
+      name: 'defrost-cock',
+      label: 'Vent Steam Defrost Jet',
+      type: 'valve',
+      state: 'chilled',
+      action: 'turn',
+      responses: {
+        turn: 'You crack the steam valve. A scalding hiss clears a silver circle in the frost; out on the ballast, three antlered shadows stand motionless watching the train pass.'
+      }
+    }
+  },
+  'samovar-spigot': {
+    title: 'BRASS SAMOVAR DISPENSER',
+    format: 'samovar',
+    screen: 'A massive fluted brass samovar bolted to the cabin floor, trembling with the rhythm of the rail ties. Its charcoal flue glows cherry-red, keeping forty liters of brackish bog tea at a rolling boil.',
+    element: {
+      name: 'tea-petcock',
+      label: 'Throw Spigot Dispenser Lever',
+      type: 'toggle',
+      state: 'drip',
+      action: 'flip',
+      responses: {
+        flip: 'You throw the knurled toggle lever. Steaming black tea rushes into your tin glass, smelling strongly of woodsmoke, chicory, and iron meltwater.'
+      }
+    }
+  },
+  'passenger-ledger': {
+    title: 'TRANSIT BERTH REGISTER',
+    format: 'filing-cabinet',
+    screen: 'A heavy buckram binder filled with yellowed travel vouchers and stamped manifests. Black ink names have been ruled out in purple crayon by order of the Ministry.',
+    element: {
+      name: 'docket-stamp',
+      label: 'Depress Conductor Berth Stamp',
+      type: 'button',
+      state: 'armed',
+      action: 'depress',
+      responses: {
+        depress: 'You bring the heavy lead stamp down with a sharp thud. A purple imprint seals the page: DISPATCH CLEARED // BERTH 04 VACANT.'
+      }
+    }
+  },
+  'switch-lever-3': {
+    title: 'WESTINGHOUSE PNEUMATIC SWITCH',
+    format: 'lever',
+    screen: 'A five-foot cast-iron switch throw standing in the vestibule corner. Steel linkages run down through the floorboards to control the narrow-gauge frogs under Car 04.',
+    element: {
+      name: 'track-throw',
+      label: 'Throw Mainline Switch Throw',
+      type: 'lever',
+      state: 'tangent',
+      action: 'pull',
+      responses: {
+        pull: 'You heave the counterweighted lever back until the iron latch clangs into place. Beneath your boots, the trucks lurch sideways with a violent metallic screech onto the ash siding.'
+      }
+    }
+  },
+  'telegraph-punch': {
+    title: 'TIN-STRIP TELEGRAPH RECORDER',
+    format: 'register',
+    screen: 'A clockwork telegraph instrument that embosses arriving messages directly into a ribbon of tin foil. The spool clatters with rapid bursts of Morse code from abandoned stations ahead.',
+    element: {
+      name: 'tape-advance',
+      label: 'Advance Embossing Wheel Dial',
+      type: 'dial',
+      state: 'ready',
+      action: 'turn',
+      responses: {
+        turn: 'You turn the brass knurled knob. A fresh foot of embossed tin slides out of the cutter: "STATION 9 UNMANNED // PROCEED THROUGH PERMAFROST WITHOUT STOPPING."'
+      }
+    }
+  },
+  'under-berth-trunk': {
+    title: 'PASSENGER BAGGAGE CHEST',
+    format: 'hatch',
+    screen: 'A zinc-lined steamer trunk secured beneath the wooden bunk with leather straps. The padlock is frozen in a block of gray ice that smells of mothballs and coal oil.',
+    element: {
+      name: 'trunk-clasp',
+      label: 'Slide Zinc Locking Bolt',
+      type: 'slider',
+      state: 'secured',
+      action: 'slide',
+      responses: {
+        slide: 'You force the stiff zinc bolt back. The heavy lid pops open two inches, spilling out a dry scent of dried chamomile, wool greatcoats, and unused railway tokens.'
+      }
+    }
+  },
+
+  // 4. monastic_loom
+  'boxwood-shuttle': {
+    title: 'BOXWOOD WEFT SHUTTLE',
+    format: 'loom',
+    screen: 'A polished boat-shaped shuttle resting in the cloth race. A quill of jet-black silk thread feeds through its ivory eyelet, ready to bind the linen warp of the cloister shroud.',
+    element: {
+      name: 'shuttle-flyer',
+      label: 'Drive Weft Shuttle Flyer',
+      type: 'lever',
+      state: 'cocked',
+      action: 'pull',
+      responses: {
+        pull: 'You jerk the picking strap. The shuttle shoots across the shed with a crisp clack-thud, laying a gleaming black line across the white linen.'
+      }
+    }
+  },
+  'selvedge-border': {
+    title: 'SELVEDGE TENSION GAUGE',
+    format: 'gauge',
+    screen: 'A pair of brass weights suspended from silk cords over the fabric margin. The weights rise and fall as the cloth advances, measuring tension to avoid dropped stitches in the sacred draft.',
+    element: {
+      name: 'tension-wheel',
+      label: 'Rotate Selvedge Tension Wheel',
+      type: 'dial',
+      state: 'level-3',
+      action: 'turn',
+      responses: {
+        turn: 'You rotate the knurled wooden dial. The cords tauten like violin strings; the selvedge edge pulls arrow-straight along the reed.'
+      }
+    }
+  },
+  'treadle-pedals': {
+    title: 'MONASTIC TREADLE ARRAY',
+    format: 'pedal',
+    screen: 'Four worn ash pedals connected by hemp cords to the heddle harnesses above. Depressing a pedal splits the white warp threads into an open shed to receive the prayer pattern.',
+    element: {
+      name: 'heddle-treadle',
+      label: 'Depress Harness Treadle Four',
+      type: 'button',
+      state: 'raised',
+      action: 'depress',
+      responses: {
+        depress: 'You step heavily onto the wooden pedal. The upper harness drops with a clatter of boxwood pulleys, opening a wide triangular shed between the warp threads.'
+      }
+    }
+  },
+  'distaff-of-flax': {
+    title: 'FLAX ROVING SPINDLE',
+    format: 'register',
+    screen: 'A tall distaff bound with silver-gray unspun flax. A weighted soapstone spindle hangs beneath, spinning slowly and twisting raw fiber into continuous liturgical thread.',
+    element: {
+      name: 'spindle-whorl',
+      label: 'Spin Soapstone Whorl',
+      type: 'dial',
+      state: 'spinning',
+      action: 'turn',
+      responses: {
+        turn: 'You give the soapstone whorl a sharp twist. It hums like a sleeping bumblebee, drawing a hair-thin flax filament down through your fingers.'
+      }
+    }
+  },
+  'counting-beads': {
+    title: 'ROSARY PATTERN REGISTER',
+    format: 'filing-cabinet',
+    screen: 'A string of seventy-two turned horn beads mounted on an iron wire above the breast beam. Moving a bead records one completed row of the funeral tapestry.',
+    element: {
+      name: 'pattern-bead',
+      label: 'Advance Liturgical Pattern Bead',
+      type: 'slider',
+      state: 'bead-18',
+      action: 'slide',
+      responses: {
+        slide: 'You slide the horn bead across the wire. It clicks into place against the abacus stop: ROW NINETEEN RECORDED // CHAPTER COMMUNION SECURED.'
+      }
+    }
+  },
+  'shear-blades': {
+    title: 'IRON CLOISTER SHEARS',
+    format: 'valve',
+    screen: 'A pair of spring-tempered forge-welded iron shears hung from a leather strap on the breast beam. Their edges are honed to shave dry parchment without snagging.',
+    element: {
+      name: 'shears-catch',
+      label: 'Release Shear Catch Toggle',
+      type: 'toggle',
+      state: 'latched',
+      action: 'flip',
+      responses: {
+        flip: 'You flip the copper spring latch. The heavy iron blades spring open with a musical ring, scenting the air with hone and machine oil.'
+      }
+    }
+  },
+
+  // 5. flooded_kitchen
+  'bakelite-radio': {
+    title: 'BAKELITE VALVE WIRELESS',
+    format: 'dial',
+    screen: 'A curved brown bakelite wireless receiver sitting in four inches of still floodwater on the side table. Behind its amber tuning dial, two vacuum valves glow like gas lanterns.',
+    element: {
+      name: 'wireless-tuner',
+      label: 'Rotate Longwave Tuning Dial',
+      type: 'dial',
+      state: '200kHz',
+      action: 'turn',
+      responses: {
+        turn: 'You rotate the ribbed knob. Static crackles like frying fat, followed by a distant brass band playing an old waltz and the BBC shipping forecast for Thames and Dover.'
+      }
+    }
+  },
+  'oilcloth-surface': {
+    title: 'YELLOW OILCLOTH REGISTER',
+    format: 'register',
+    screen: 'A broad pine table covered in cracked checkered oilcloth. Brown tea stains, knife scratches, and grease pencil tally marks form a domestic cartography of forgotten weeks.',
+    element: {
+      name: 'grease-pencil',
+      label: 'Etch Mark With Grease Pencil',
+      type: 'button',
+      state: 'ready',
+      action: 'depress',
+      responses: {
+        depress: 'You press the wax pencil firmly against the oilcloth, scoring a thick black tally: "WEEK 12 // WATER LEVEL: BOTTOM SHELF."'
+      }
+    }
+  },
+  'cutlery-drawer': {
+    title: 'SWOLLEN DEAL CUTLERY CHEST',
+    format: 'filing-cabinet',
+    screen: 'A kitchen drawer swollen shut by dampness, jammed three inches open. Tarnished nickel teaspoons, bone fish-knives, and lead tea weights rattle inside like dead teeth.',
+    element: {
+      name: 'drawer-pull',
+      label: 'Heave Wooden Drawer Pull',
+      type: 'lever',
+      state: 'jammed',
+      action: 'pull',
+      responses: {
+        pull: 'You give the wooden knob a fierce tug. The deal slides with a wet groan, exposing a velvet-lined cutlery roll and an envelope of unopened telegrams.'
+      }
+    }
+  },
+  'condensed-milk-tin': {
+    title: 'PUNCTURED MILK RATION',
+    format: 'gauge',
+    screen: 'A vintage blue-and-white tin with two rusty nail holes in the lid. Thick, sugary cream slowly oozes down the tinplate into the puddle below.',
+    element: {
+      name: 'ration-seal',
+      label: 'Slide Tin Cover Clip',
+      type: 'slider',
+      state: 'dripping',
+      action: 'slide',
+      responses: {
+        slide: 'You slide the tin clip over the puncture. A bead of sweet cream wells up on your thumb, tasting of burnt sugar and canned iron.'
+      }
+    }
+  },
+  'drowned-carpet': {
+    title: 'SUBMERGED AXMINSTER RUG',
+    format: 'mouth',
+    screen: 'A waterlogged floral wool carpet beneath five inches of cold brackish water. Air bubbles trapped in the sodden pile rise to the surface whenever someone shifts weight.',
+    element: {
+      name: 'drain-plug',
+      label: 'Pull Scupper Plug Toggle',
+      type: 'toggle',
+      state: 'plugged',
+      action: 'flip',
+      responses: {
+        flip: 'You kick the lead scupper toggle. A hollow sucking gurgle resonates under the floorboards, pulling small paper floating scraps into a spinning whirlpool.'
+      }
+    }
+  },
+  'steeped-pot': {
+    title: 'ENAMEL TEA INFUSER',
+    format: 'valve',
+    screen: 'A speckled blue enamel teapot perched on an overturned biscuit tin above the waterline. A thin streamer of bergamot steam rises from its chipped spout.',
+    element: {
+      name: 'infuser-lid',
+      label: 'Lift Enamel Pot Lid',
+      type: 'aperture',
+      state: 'steeping',
+      action: 'open',
+      responses: {
+        open: 'You lift the chipped blue lid. A rich cloud of black tea vapor and boiling chicory warms your face, dispelling the stagnant chill of the room.'
+      }
+    }
+  },
+
+  // 6. orbital_solarium
+  'jasmine-trellis': {
+    title: 'HYDROPONIC JASMINE ARBOR',
+    format: 'retort',
+    screen: 'A floating brass framework draped with fragrant white star-blossoms. In microgravity, water mist forms glistening globes among the emerald leaves, catching purple starlight.',
+    element: {
+      name: 'mist-manifold',
+      label: 'Open Nutrient Mist Valve',
+      type: 'valve',
+      state: 'metered',
+      action: 'turn',
+      responses: {
+        turn: 'You crack the knurled valve. A fine aerosol of chamomile-scented nutrient brine billows across the vine; every blossom opens wide with an audible rustle.'
+      }
+    }
+  },
+  'amethyst-prism': {
+    title: 'SOLAR QUARTZ REFRACTOR',
+    format: 'mirror',
+    screen: 'A hand-cut hexagonal amethyst suspended in counterbalanced gimbals. It splits the dying star\'s violet rays into three calibrated beams directed across the algae beds.',
+    element: {
+      name: 'gimbal-vernier',
+      label: 'Adjust Prism Vernier Dial',
+      type: 'dial',
+      state: 'azimuth-4',
+      action: 'turn',
+      responses: {
+        turn: 'You turn the knurled bronze dial. The amethyst rotates three degrees; a deep violet lance of light ignites the moss tray, illuminating glowing spore veins.'
+      }
+    }
+  },
+  'water-droplet': {
+    title: 'ORBITAL MENISCUS SPHERE',
+    format: 'gauge',
+    screen: 'A twelve-inch globe of distilled water hovering without support in the cupola center. Inside its curved optical surface, the entire dying constellation is magnified in miniature.',
+    element: {
+      name: 'surface-tension-pin',
+      label: 'Touch Surface Probe Key',
+      type: 'button',
+      state: 'poised',
+      action: 'depress',
+      responses: {
+        depress: 'You touch the platinum probe to the sphere. Capillary waves shimmer across the liquid surface, sending refracted violet rainbows dancing across the ceiling.'
+      }
+    }
+  },
+  'compost-retort': {
+    title: 'IMPERIAL DIGESTION RETORT',
+    format: 'retort',
+    screen: 'A sealed bronze alembic where fallen camellia petals and old imperial treaties decompose into rich humus. A glass sight tube reveals warm brown loam bubbling slowly.',
+    element: {
+      name: 'digester-piston',
+      label: 'Advance Digestor Ram Lever',
+      type: 'lever',
+      state: 'charged',
+      action: 'pull',
+      responses: {
+        pull: 'You haul back the curved bronze lever. The internal ram compresses the composting mass; a warm earthy vapor smells richly of rain on summer slate.'
+      }
+    }
+  },
+  'mercury-manometer': {
+    title: 'VACUUM PRESSURE MANOMETER',
+    format: 'gauge',
+    screen: 'A U-shaped borosilicate tube filled with quicksilver, measuring pressure against the vacuum outside the dome glass. A small brass float records barometric trends.',
+    element: {
+      name: 'manometer-shunt',
+      label: 'Slide Manometer Calibrator',
+      type: 'slider',
+      state: '0.8-bar',
+      action: 'slide',
+      responses: {
+        slide: 'You slide the brass index marker down the scale. The mercury level stabilizes with a sharp metallic clink: SECTOR INTEGRITY CONFIRMED // DOME PRESSURE STEADY.'
+      }
+    }
+  },
+  'imperial-graft': {
+    title: 'ROYAL BOTANICAL GRAFT',
+    format: 'mouth',
+    screen: 'A delicate botanical splice where a wild thorn-vine has been grafted into an imperial pear bough using waxed silk thread. A single white bud is swelling at the seam.',
+    element: {
+      name: 'graft-ligature',
+      label: 'Tighten Silk Ligature Toggle',
+      type: 'toggle',
+      state: 'tensioned',
+      action: 'flip',
+      responses: {
+        flip: 'You flip the miniature ivory toggle. The silk thread tightens; pale green sap pulses through the translucent skin of the bud, illuminating its petals from within.'
+      }
+    }
+  },
+
+  // 7. glacial_scriptorium
+  'frozen-ledger-1891': {
+    title: 'BLUE-ICE REGISTRY FOLIO',
+    format: 'filing-cabinet',
+    screen: 'A massive sheepskin folio frozen solid into a brick of blue glacial ice. Through the transparent frost, rows of iron-gall ledger entries are legible down to the kopek.',
+    element: {
+      name: 'thaw-wire',
+      label: 'Energize Charcoal Thaw Wire',
+      type: 'toggle',
+      state: 'cold',
+      action: 'flip',
+      responses: {
+        flip: 'You flip the copper toggle switch. A thin red glow runs through the nichrome wire embedded in the ice; a melted tear trickles down, revealing page 142.'
+      }
+    }
+  },
+  'charcoal-brazier': {
+    title: 'CLERK HEATING BRAZIER',
+    format: 'brazier',
+    screen: 'A shallow cast-iron brazier burning dry birch charcoal. It radiates dry heat just sufficient to keep the clerk\'s ink from crystallizing in the horn inkwell.',
+    element: {
+      name: 'draft-shutter',
+      label: 'Rotate Brazier Air Draft',
+      type: 'dial',
+      state: 'quarter-draft',
+      action: 'turn',
+      responses: {
+        turn: 'You turn the perforated damper. A glowing crimson breath sweeps through the coals; a fragrant plume of birch smoke rises toward the frosty rafters.'
+      }
+    }
+  },
+  'lead-pigeonhole': {
+    title: 'CHANCERY DOCKET REPOSITORY',
+    format: 'filing-cabinet',
+    screen: 'A grid of eighty heavy lead pigeonholes set into the frozen granite wall. Bundles of tied vellum scrolls are filed under imperial wax seals, covered in light hoarfrost.',
+    element: {
+      name: 'docket-ejector',
+      label: 'Pull Docket Ejector Lever',
+      type: 'lever',
+      state: 'set',
+      action: 'pull',
+      responses: {
+        pull: 'You pull the brass ejector rod. A frozen vellum scroll slides forward into your hands with a dry rasp: "UKASE 418: EXPEDITION INTO THE SILENT GLACIER."'
+      }
+    }
+  },
+  'gall-inkwell': {
+    title: 'OAK-GALL SLUSH INKWELL',
+    format: 'gauge',
+    screen: 'A heavy horned-owl inkwell carved of black basalt. Inside rests thick, purple oak-gall ink, kept at the exact boundary between liquid and slush.',
+    element: {
+      name: 'stirring-plunger',
+      label: 'Depress Inkwell Plunger',
+      type: 'button',
+      state: 'slushed',
+      action: 'depress',
+      responses: {
+        depress: 'You depress the basalt plunger. The ink slush swirls into a glossy black pool; the steel nib draws a rich, dark line across the cold vellum.'
+      }
+    }
+  },
+  'parchment-press': {
+    title: 'SCREW-THREAD VELLUM PRESS',
+    format: 'valve',
+    screen: 'A massive oak and iron screw press used to flatten water-swollen calfskin sheets before filing. Its iron flywheel is encrusted in gray frost crystals.',
+    element: {
+      name: 'flywheel-turner',
+      label: 'Turn Heavy Flywheel Handwheel',
+      type: 'valve',
+      state: 'clamped',
+      action: 'turn',
+      responses: {
+        turn: 'You grasp the counterweighted iron spokes and heave. The heavy screw descends with a deep groan; the calfskin beneath flattens with a sharp crack of breaking ice crystals.'
+      }
+    }
+  },
+  'brass-clerks-bell': {
+    title: 'CHANCERY SUMMONS CHIME',
+    format: 'mouth',
+    screen: 'A small polished brass hand-bell resting on a pad of green baize. When struck in the glacial vault, its high-pitched ping travels down the corridors for half a verst.',
+    element: {
+      name: 'striker-hasp',
+      label: 'Trip Bell Striker Lever',
+      type: 'lever',
+      state: 'primed',
+      action: 'pull',
+      responses: {
+        pull: 'You trigger the spring-loaded striker. A piercing silver tone rings through the frozen hall; out in the stacks, a dozen clerks cough softly in unison.'
+      }
+    }
+  },
+
+  // 8. chime_foundry
+  'master-chime-alpha': {
+    title: 'TWELVE-TON MASTER BOWL',
+    format: 'bell',
+    screen: 'An immense inverted bronze bell suspended from charred oak roof trusses. Its thick rim is cold and dark as river ice, but hums with an ultrasonic vibration that rattles your teeth.',
+    element: {
+      name: 'mallet-release',
+      label: 'Trip Suspended Mallet Cam',
+      type: 'lever',
+      state: 'cocked',
+      action: 'pull',
+      responses: {
+        pull: 'You yank the lanyard. The eighty-pound lead hammer swings and strikes the bronze rim with an immense, sonorous roar; an ocean of pure C-sharp vibrates through the flagstones.'
+      }
+    }
+  },
+  'cooling-sand-trough': {
+    title: 'SILICATE CASTING TRENCH',
+    format: 'brazier',
+    screen: 'A deep rectangular trench of black loam sand still radiating dry heat from yesterday\'s bell pour. Beneath the surface, an eight-foot chime is slowly contracting.',
+    element: {
+      name: 'sand-probe',
+      label: 'Thrust Pyrometer Probe Key',
+      type: 'button',
+      state: 'ready',
+      action: 'depress',
+      responses: {
+        depress: 'You sink the copper probe into the hot black sand. The dial snaps to: 420 DEGREES // CORE SOLIDIFICATION: COMPLETE.'
+      }
+    }
+  },
+  'obsidian-fork': {
+    title: 'VOLCANIC PITCH STANDARD',
+    format: 'gauge',
+    screen: 'A tuning fork ground from pure jet-black obsidian mounted in a water-filled brass bowl. In air it is silent; in water, it creates intricate standing wave mandalas.',
+    element: {
+      name: 'fork-clapper',
+      label: 'Slide Water Immersion Ring',
+      type: 'slider',
+      state: 'dry',
+      action: 'slide',
+      responses: {
+        slide: 'You lower the tines into the water. Thousands of microscopic mist droplets erupt in a humming fountain, ringing a pure 432 Hertz in your collarbone.'
+      }
+    }
+  },
+  'tuning-chisel': {
+    title: 'DIAMOND-TIPPED SCRAPER',
+    format: 'register',
+    screen: 'A heavy scraper arm mounted to an iron carriage spanning the bell rim. Its black industrial diamond edge shaves micron-thin curls of bronze to tune overtones.',
+    element: {
+      name: 'lead-screw-dial',
+      label: 'Advance Scraper Lead Screw',
+      type: 'dial',
+      state: 'calibrated',
+      action: 'turn',
+      responses: {
+        turn: 'You turn the calibrated handwheel one notch. The diamond blade kisses the revolving bronze; a hair of bright gold metal curls away with a high whistling chime.'
+      }
+    }
+  },
+  'chalk-register': {
+    title: 'HARMONIC CHALK TABLET',
+    format: 'filing-cabinet',
+    screen: 'A slate wall ruled in white chalk columns recording fundamental pitches, strike notes, and tierce ratios for every casting since the foundry was founded.',
+    element: {
+      name: 'slate-slate-slide',
+      label: 'Slide Octave Register Rule',
+      type: 'slider',
+      state: 'tierce-4',
+      action: 'slide',
+      responses: {
+        slide: 'You slide the brass index rule across the slate: OVERTONE HARMONIC MATCHED // PITCH CONSISTENCY CONFIRMED.'
+      }
+    }
+  },
+  'felt-damper': {
+    title: 'BOILED FELT DAMPING ARM',
+    format: 'aperture',
+    screen: 'A thick pad of dense boiled wool mounted on an articulated ash lever. Bringing it against a vibrating bell instantly chokes unwanted hum overtones.',
+    element: {
+      name: 'damper-throw',
+      label: 'Throw Felt Damper Cam',
+      type: 'toggle',
+      state: 'disengaged',
+      action: 'flip',
+      responses: {
+        flip: 'You flip the wooden eccentric cam. The heavy wool pad presses against the bronze rim; the thunderous ringing is quenched in an instant, leaving profound, heavy silence.'
+      }
+    }
+  }
+};
+
+const ARCHETYPE_META = {
+  'brine_beacon': {
+    openVerb: 'unveil',
+    homeVerb: 'watch',
+    extraVerbs: [
+      { name: 'unveil', help: 'unveil [entity] — draw back the tarpaulin to open the running apparatus screen.' },
+      { name: 'watch', help: 'watch — step away from the active station and return to the main gallery overview.' }
+    ]
+  },
+  'dead_god_cranium': {
+    openVerb: 'trepan',
+    homeVerb: 'vault',
+    extraVerbs: [
+      { name: 'vault', help: 'vault — retreat from the open conduit back to the cranial gallery overview.' }
+    ]
+  },
+  'ash_railway': {
+    openVerb: 'board',
+    homeVerb: 'berth',
+    extraVerbs: [
+      { name: 'board', help: 'board [entity] — open and enter the console compartment of the carriage apparatus.' },
+      { name: 'berth', help: 'berth — return to the conductor overview and central train corridor.' }
+    ]
+  },
+  'monastic_loom': {
+    openVerb: 'unfold',
+    homeVerb: 'selvedge',
+    extraVerbs: [
+      { name: 'unfold', help: 'unfold [entity] — open the warp frame to engage the apparatus directly.' },
+      { name: 'selvedge', help: 'selvedge — step back from the loom to view the cloister overview.' }
+    ]
+  },
+  'flooded_kitchen': {
+    openVerb: 'approach',
+    homeVerb: 'table',
+    extraVerbs: [
+      { name: 'approach', help: 'approach [entity] — wade over to the station to open and operate its mechanism.' },
+      { name: 'table', help: 'table — step back to the dry central cutting board overview.' }
+    ]
+  },
+  'orbital_solarium': {
+    openVerb: 'illuminate',
+    homeVerb: 'dome',
+    extraVerbs: [
+      { name: 'illuminate', help: 'illuminate [entity] — open the sun louvers and activate the station instrument.' },
+      { name: 'dome', help: 'dome — step away from the bench and return to the central cupola overview.' }
+    ]
+  },
+  'glacial_scriptorium': {
+    openVerb: 'docket',
+    homeVerb: 'registry',
+    extraVerbs: [
+      { name: 'docket', help: 'docket [entity] — open the cold chancery drawer and inspect the working mechanism.' },
+      { name: 'registry', help: 'registry — return to the main clerk overview at the front of the frozen hall.' }
+    ]
+  },
+  'chime_foundry': {
+    openVerb: 'resonate',
+    homeVerb: 'pit',
+    extraVerbs: [
+      { name: 'resonate', help: 'resonate [entity] — open the acoustic dampers and stand before the sounding instrument.' },
+      { name: 'pit', help: 'pit — step back from the mould to the central foundry overview.' }
+    ]
+  }
+};
+
 const ARCHETYPES = [
   {
     id: 'brine_beacon',
@@ -1216,34 +2020,144 @@ const ARCHETYPES = [
   }
 ];
 
-function generateWorld(seedInput) {
+// Wire openVerb, homeVerb, and apps into ARCHETYPES
+for (const arch of ARCHETYPES) {
+  const meta = ARCHETYPE_META[arch.id];
+  if (meta) {
+    arch.openVerb = meta.openVerb;
+    arch.homeVerb = meta.homeVerb;
+    for (const ev of meta.extraVerbs) {
+      if (!arch.verbsPool.some(v => v.name === ev.name)) {
+        arch.verbsPool.push(ev);
+      }
+    }
+  }
+  for (const ent of arch.entitiesPool) {
+    const appDef = ENTITY_APPS[ent.name];
+    if (appDef) {
+      ent.app = {
+        title: appDef.title,
+        format: appDef.format,
+        screen: appDef.screen,
+        element: { ...appDef.element },
+        elements: [{ ...appDef.element }]
+      };
+    } else {
+      ent.app = {
+        title: ent.title.toUpperCase(),
+        format: 'apparatus',
+        screen: ent.desc,
+        element: {
+          name: `${ent.name}-switch`,
+          label: `Operate ${ent.title}`,
+          type: 'button',
+          state: 'primed',
+          action: 'operate',
+          responses: { operate: `You operate the ${ent.title}. ${ent.desc}` }
+        },
+        elements: []
+      };
+    }
+  }
+}
+
+
+function generateWorld(seedInput, conceptInput) {
   const prng = new PRNG(seedInput);
-  const archetype = prng.choice(ARCHETYPES);
+
+  let concept = 'random';
+  if (conceptInput && typeof conceptInput === 'string' && conceptInput.trim() && conceptInput.trim().toLowerCase() !== 'random') {
+    concept = conceptInput.trim();
+  }
+
+  // Concept steering for archetype selection
+  let archetype = null;
+  if (concept !== 'random') {
+    const cLow = concept.toLowerCase();
+    const matches = [];
+    if (/\b(lighthouse|pharos|beacon|sea|ocean|brine|salt|tallow|foghorn|underwater|submarine|water|nautical|mariner|coast|reef|glass)\b/i.test(cLow)) {
+      matches.push('brine_beacon');
+    }
+    if (/\b(cranium|skull|bone|god|angel|seraph|marrow|titan|autopsy|trepan|ossuary|corpse|spine|nerve|head|celestial)\b/i.test(cLow)) {
+      matches.push('dead_god_cranium');
+    }
+    if (/\b(railway|train|locomotive|carriage|rail|track|caboose|snow|frost|permafrost|tundra|siberia|coal|samovar|station|bog)\b/i.test(cLow)) {
+      matches.push('ash_railway');
+    }
+    if (/\b(loom|weave|weaver|cloth|shuttle|thread|wool|silk|tapestry|monk|monastery|monastic|cloister|abbess|church|nun|linen)\b/i.test(cLow)) {
+      matches.push('monastic_loom');
+    }
+    if (/\b(kitchen|flood|cook|table|oilcloth|stove|kettle|tea|broth|soup|pantry|cellar|grandmother|house|domestic|lard|radio)\b/i.test(cLow)) {
+      matches.push('flooded_kitchen');
+    }
+    if (/\b(orbital|space|solarium|sun|solar|star|greenhouse|hydroponic|botanic|garden|plant|flower|orbit|satellite|dome|leaf)\b/i.test(cLow)) {
+      matches.push('orbital_solarium');
+    }
+    if (/\b(glacier|ice|cold|scriptorium|scribe|ink|paper|archive|bureau|chancery|ledger|frost|vellum|library|audit)\b/i.test(cLow)) {
+      matches.push('glacial_scriptorium');
+    }
+    if (/\b(chime|bell|foundry|bronze|cast|furnace|sound|acoustic|resonate|hammer|forge|metallurgy|tone|pitch|tuning)\b/i.test(cLow)) {
+      matches.push('chime_foundry');
+    }
+
+    if (matches.length > 0) {
+      const targetId = prng.choice(matches);
+      archetype = ARCHETYPES.find(a => a.id === targetId);
+    }
+  }
+
+  if (!archetype) {
+    archetype = prng.choice(ARCHETYPES);
+  }
 
   const name = archetype.nameTemplates[prng.int(0, archetype.nameTemplates.length - 1)](prng);
-  const theme = prng.choice(archetypes(archetype.id).themes || archetype.themes);
+  let theme = prng.choice(archetypes(archetype.id).themes || archetype.themes);
+  if (concept !== 'random') {
+    theme = `${theme} — shaped by concept "${concept}"`;
+  }
   const palette = prng.choice(archetype.palettes);
   const keeperTemplate = prng.choice(archetype.keepers);
 
-  // Entities: select 4-8 entities from the pool
+  // Entities: select 4-6 entities from the pool
   const entityCount = Math.min(archetype.entitiesPool.length, prng.int(4, Math.min(6, archetype.entitiesPool.length)));
-  const selectedEntities = prng.sample(archetype.entitiesPool, entityCount);
+  const selectedEntities = prng.sample(archetype.entitiesPool, entityCount).map(e => ({
+    name: e.name,
+    title: e.title,
+    aliases: e.aliases ? [...e.aliases] : [],
+    kind: e.kind,
+    desc: e.desc,
+    reachVerbs: e.reachVerbs ? [...e.reachVerbs] : [],
+    responses: e.responses ? { ...e.responses } : {},
+    app: {
+      title: e.app.title,
+      format: e.app.format,
+      screen: e.app.screen,
+      element: { ...e.app.element },
+      elements: [{ ...e.app.element }]
+    }
+  }));
 
   // Laws: select 2-4 laws from the pool
   const lawCount = prng.int(2, Math.min(4, archetype.lawsPool.length));
   const selectedLaws = prng.sample(archetype.lawsPool, lawCount);
 
   // Verbs: select 5-8 verbs
-  // Ensure helpVerb and reseedVerb are included!
+  // Ensure helpVerb, reseedVerb, openVerb, and homeVerb are included!
   const allVerbs = archetype.verbsPool.slice();
   const helpVerbObj = allVerbs.find(v => v.name === archetype.helpVerb);
   const reseedVerbObj = allVerbs.find(v => v.name === archetype.reseedVerb);
-  const otherVerbs = allVerbs.filter(v => v.name !== archetype.helpVerb && v.name !== archetype.reseedVerb);
+  const openVerbObj = allVerbs.find(v => v.name === archetype.openVerb);
+  const homeVerbObj = allVerbs.find(v => v.name === archetype.homeVerb);
+
+  const mandatory = [helpVerbObj, reseedVerbObj, openVerbObj, homeVerbObj].filter(Boolean);
+  const mandatoryNames = new Set(mandatory.map(v => v.name));
+  const otherVerbs = allVerbs.filter(v => !mandatoryNames.has(v.name));
 
   const targetVerbCount = prng.int(5, Math.min(8, allVerbs.length));
-  const selectedOthers = prng.sample(otherVerbs, Math.max(3, targetVerbCount - 2));
+  const neededOthers = Math.max(1, targetVerbCount - mandatory.length);
+  const selectedOthers = prng.sample(otherVerbs, neededOthers);
 
-  const verbs = [helpVerbObj, ...selectedOthers, reseedVerbObj].filter(Boolean);
+  const verbs = [...mandatory, ...selectedOthers];
 
   // Script
   const script = archetype.scriptGenerator(keeperTemplate, selectedEntities, prng);
@@ -1258,6 +2172,7 @@ function generateWorld(seedInput) {
   return {
     name,
     theme,
+    concept,
     palette,
     keeper,
     entities: selectedEntities,
@@ -1268,7 +2183,101 @@ function generateWorld(seedInput) {
     archetypeId: archetype.id,
     helpVerb: archetype.helpVerb,
     reseedVerb: archetype.reseedVerb,
+    openVerb: archetype.openVerb,
+    homeVerb: archetype.homeVerb,
     unknownResponseGenerators: keeperTemplate.unknownResponses
+  };
+}
+
+function interpretAppCombinatorial(world, entityQuery) {
+  const clean = String(entityQuery || '').toLowerCase().trim();
+  let entity = (world.entities || []).find(e =>
+    e.name.toLowerCase() === clean ||
+    (e.title && e.title.toLowerCase() === clean) ||
+    (e.aliases && e.aliases.some(a => a.toLowerCase() === clean))
+  );
+
+  if (!entity && world.entities && world.entities.length > 0) {
+    entity = world.entities[0];
+  }
+
+  if (!entity) {
+    return createDamagedAppShell(world, entityQuery, 'No entity found');
+  }
+
+  const app = entity.app || {
+    title: entity.title.toUpperCase(),
+    format: 'gauge',
+    screen: entity.desc,
+    element: {
+      name: `${entity.name}-control`,
+      label: `Inspect ${entity.title}`,
+      type: 'dial',
+      state: 'calibrated',
+      action: 'turn',
+      responses: { turn: `You turn the dial on the ${entity.title}. ${entity.desc}` }
+    }
+  };
+
+  const elem = app.element || (app.elements && app.elements[0]) || {
+    name: `${entity.name}-control`,
+    label: `Engage ${entity.title}`,
+    type: 'button',
+    state: 'primed',
+    action: 'engage',
+    responses: { engage: `You engage the apparatus.` }
+  };
+
+  return {
+    entityName: entity.name,
+    title: app.title || entity.title.toUpperCase(),
+    format: app.format || 'apparatus',
+    screen: app.screen || entity.desc,
+    statusLine: `[${world.name} // ${app.format ? app.format.toUpperCase() : 'APPARATUS'} // STATE: ${elem.state.toUpperCase()}]`,
+    element: {
+      ...elem,
+      currentValue: elem.state
+    },
+    elements: [elem],
+    palette: world.palette
+  };
+}
+
+function createDamagedAppShell(world, entityQuery, rawContent = '') {
+  const clean = String(entityQuery || '').toLowerCase().trim();
+  const entity = (world && world.entities ? world.entities.find(e => e.name.toLowerCase() === clean) : null) || (world && world.entities ? world.entities[0] : null);
+  const entityTitle = entity ? entity.title : (entityQuery || 'APPARATUS');
+  const entityName = entity ? entity.name : 'damaged-apparatus';
+
+  return {
+    entityName,
+    title: `${entityTitle.toUpperCase()} [DAMAGED CASING]`,
+    format: 'fractured-casing',
+    screen: `[SYSTEM COHERENCE DECAY] The apparatus housing for ${entityTitle} has fractured under atmospheric stress. Pale static bleeds through hairline cracks in the enamel. Internal linkages hang loose, twitching with residual galvanic pulse.`,
+    statusLine: `STATUS: DAMAGED // CASING FAULT // CORRUPTION DENSITY: HIGH`,
+    element: {
+      name: 'emergency-bypass',
+      label: 'Force Fracture Bypass',
+      type: 'lever',
+      state: 'jammed',
+      action: 'force',
+      responses: {
+        force: 'You wrench the cracked bypass lever against its bent pins. A shower of cold sparks answers, and the needle shudders back into baseline alignment.'
+      },
+      currentValue: 'jammed'
+    },
+    elements: [{
+      name: 'emergency-bypass',
+      label: 'Force Fracture Bypass',
+      type: 'lever',
+      state: 'jammed',
+      action: 'force',
+      responses: {
+        force: 'You wrench the cracked bypass lever against its bent pins. A shower of cold sparks answers, and the needle shudders back into baseline alignment.'
+      }
+    }],
+    palette: world ? world.palette : ['#09131b', '#0f2537', '#4ecdc4', '#cbe3db', '#e07a5f'],
+    damaged: true
   };
 }
 
@@ -1278,5 +2287,8 @@ function archetypes(id) {
 
 module.exports = {
   ARCHETYPES,
-  generateWorld
+  generateWorld,
+  interpretAppCombinatorial,
+  createDamagedAppShell
 };
+

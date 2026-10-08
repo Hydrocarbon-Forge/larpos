@@ -1,13 +1,14 @@
 // app/commands.js — In-character command layer & conversation state for LarpOS
 // Zero dependencies. Supports local LLM with automatic combinatorial fallback.
 
-const { generateWorld } = require('./world');
-const { generateWorldWithLLM, generateCommandResponseWithLLM } = require('./llm');
+const { generateWorld, interpretAppCombinatorial } = require('./world');
+const { generateWorldWithLLM, interpretAppWithLLM, generateCommandResponseWithLLM } = require('./llm');
 
 class CommandSession {
   constructor(world, options = {}) {
     this.world = world;
     this.history = []; // last few command records
+    this.currentApp = null; // currently open app entity (if any)
     this.onReseed = options.onReseed || null;
     this.disableLLM = !!options.disableLLM;
     this.llmBase = options.llmBase || null;
@@ -16,6 +17,7 @@ class CommandSession {
   setWorld(world) {
     this.world = world;
     this.history = [];
+    this.currentApp = null;
   }
 
   recordCommand(record) {
@@ -66,11 +68,25 @@ class CommandSession {
     const lastCmd = this.getLastCommand();
 
     // 1. Reseed check: "new world", "new-world", "reseed", or world's reseed verb
-    if (lower === 'new world' || lower === 'new-world' || lower === 'reseed' || lower === this.world.reseedVerb) {
+    const isReseed = (
+      lower === 'new world' ||
+      lower === 'new-world' ||
+      lower === 'reseed' ||
+      lower.startsWith('new world ') ||
+      lower === (this.world.reseedVerb || '').toLowerCase()
+    );
+
+    if (isReseed) {
+      let concept = this.world.concept || 'random';
+      if (lower.startsWith('new world ')) {
+        const extra = text.slice(10).trim();
+        if (extra) concept = extra;
+      }
+
       const oldKeeper = this.world.keeper;
       const oldName = this.world.name;
       const nextSeed = ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
-      const newWorld = generateWorld(nextSeed);
+      const newWorld = generateWorld(nextSeed, concept);
       this.setWorld(newWorld);
       if (this.onReseed) {
         this.onReseed(newWorld);
@@ -83,6 +99,7 @@ class CommandSession {
         `[BOOT SEQUENCE INITIALIZED // SEED: ${newWorld.seed}]`,
         `NAME: ${newWorld.name}`,
         `THEME: ${newWorld.theme}`,
+        `CONCEPT: ${newWorld.concept}`,
         `KEEPER: ${newWorld.keeper.name}`,
         `---`,
         ...newWorld.script
@@ -91,8 +108,26 @@ class CommandSession {
       return {
         out,
         reseeded: true,
+        returnToConcept: true,
         world: newWorld
       };
+    }
+
+    // 2. Go Home check: return to system overview from open app
+    const isHome = (
+      lower === 'home' ||
+      lower === 'overview' ||
+      lower === 'close' ||
+      lower === (this.world.homeVerb || '').toLowerCase()
+    );
+
+    if (isHome) {
+      const prevApp = this.currentApp;
+      this.currentApp = null;
+      const appName = prevApp ? (prevApp.app ? prevApp.app.title : prevApp.title) : 'apparatus';
+      const out = `${this.world.keeper.prefix}: "You step back from the ${appName} and return to the central overview."`;
+      this.recordCommand({ text, verb: 'home', out, failed: false });
+      return { out, closeApp: true };
     }
 
     // Parse leading verb + args
@@ -100,10 +135,56 @@ class CommandSession {
     const verb = parts[0].toLowerCase();
     const args = parts.slice(1).join(' ').trim();
 
-    const isKnownVerb = this.world.verbs.some(v => v.name.toLowerCase() === verb);
-    const isHelpVerb = (verb === 'help' || verb === '?' || verb === this.world.helpVerb.toLowerCase());
+    // 3. Open App check: "open <target>" or world's openVerb "<target>"
+    const isOpenVerb = (verb === 'open' || verb === (this.world.openVerb || '').toLowerCase());
+    if (isOpenVerb) {
+      const targetEntity = this.findEntity(args);
+      if (targetEntity) {
+        this.currentApp = targetEntity;
+        const appScreen = interpretAppCombinatorial(this.world, targetEntity.name);
+        const out = [
+          `[OPENING APPARATUS: ${appScreen.title}]`,
+          appScreen.screen,
+          `${this.world.keeper.prefix}: "You stand before the ${appScreen.title}. Control: '${appScreen.element.label}' [action: ${appScreen.element.action}]. Return via '${this.world.homeVerb}'."`
+        ].join('\n');
+        this.recordCommand({ text, verb: 'open', entity: targetEntity.name, out, failed: false });
+        return {
+          out,
+          openApp: targetEntity.name,
+          app: appScreen
+        };
+      }
+      if (!args) {
+        const appList = this.world.entities.map(e => `  - ${e.name} (${e.app ? e.app.title : e.title}) [${e.app ? e.app.format : 'gauge'}]`).join('\n');
+        const out = `${this.world.keeper.prefix}: "Which apparatus do you wish to ${verb}? Available catalog:\n${appList}\nUse '${verb} <name>'."`;
+        this.recordCommand({ text, verb: 'open', out, failed: false });
+        return { out };
+      }
+    }
 
-    // 2. Help request
+    // 4. Element interaction within open app
+    if (this.currentApp) {
+      const appSpec = this.currentApp.app || {};
+      const elem = appSpec.element || {};
+      const actionName = (elem.action || '').toLowerCase();
+      const elemName = (elem.name || '').toLowerCase();
+
+      if (verb === actionName || lower === actionName || text.toLowerCase().includes(actionName) || (args && args.toLowerCase() === elemName)) {
+        const responseText = (elem.responses && elem.responses[actionName]) || `You activate the ${elem.label || elem.name}. The mechanism responds.`;
+        const out = `${responseText}\n[STATUS: ENGAGED // ACTIVE TELEMETRY]`;
+        this.recordCommand({ text, verb: actionName, entity: this.currentApp.name, out, failed: false });
+        return {
+          out,
+          appUpdated: true,
+          elementState: 'engaged'
+        };
+      }
+    }
+
+    const isKnownVerb = this.world.verbs.some(v => v.name.toLowerCase() === verb);
+    const isHelpVerb = (verb === 'help' || verb === '?' || verb === (this.world.helpVerb || '').toLowerCase());
+
+    // 5. Help request
     if (isHelpVerb) {
       if (args) {
         const targetVerb = this.world.verbs.find(v => v.name.toLowerCase() === args.toLowerCase());
@@ -116,7 +197,7 @@ class CommandSession {
 
       const verbList = this.world.verbs.map(v => `  - ${v.name.toUpperCase()}: ${v.help}`).join('\n');
       const lawsList = this.world.laws.map((l, i) => `  [Law ${i + 1}] ${l}`).join('\n');
-      const entityList = this.world.entities.map(e => `  * ${e.name} (${e.title}) — ${e.kind}`).join('\n');
+      const appList = this.world.entities.map(e => `  * ${e.name} — ${e.app ? e.app.title : e.title} [${e.app ? e.app.format : 'app'}]`).join('\n');
 
       let contextNote = '';
       if (lastCmd && lastCmd.failed) {
@@ -131,12 +212,14 @@ class CommandSession {
         `SYSTEM LAWS:`,
         lawsList,
         ``,
-        `INHABITED ENTITIES:`,
-        entityList,
+        `GENERATED APPLICATIONS (OPEN VIA '${(this.world.openVerb || 'open').toUpperCase()} <name>'):`,
+        appList,
         ``,
         `OPERATIONAL VERBS:`,
         verbList,
-        `  - NEW WORLD / ${this.world.reseedVerb.toUpperCase()}: Dissolve this world and boot a fresh reality.`,
+        `  - ${(this.world.openVerb || 'open').toUpperCase()} [app]: Open an apparatus into its running screen.`,
+        `  - ${(this.world.homeVerb || 'home').toUpperCase()}: Step back to the system overview.`,
+        `  - NEW WORLD / ${(this.world.reseedVerb || 'reseed').toUpperCase()}: Dissolve this world and return to concept prompt.`,
         ``,
         `${this.world.keeper.prefix}: "Use the verbs as they are meant to be used. The system does not negotiate."`
       ].filter(Boolean).join('\n');
@@ -145,7 +228,7 @@ class CommandSession {
       return { out };
     }
 
-    // 2b. System inquiries: "laws", "entities", "look"
+    // 6. System inquiries: "laws", "entities", "apps", "look"
     if (verb === 'laws') {
       const lawsList = this.world.laws.map((l, i) => `  [Law ${i + 1}] ${l}`).join('\n');
       const out = `${this.world.keeper.prefix}: "The operational laws of this station are binding:"\n${lawsList}`;
@@ -153,14 +236,14 @@ class CommandSession {
       return { out };
     }
 
-    if (verb === 'entities' || verb === 'manifest' || verb === 'things' || (verb === 'look' && !args) || (verb === 'ls' && !args)) {
-      const entityList = this.world.entities.map(e => `  * ${e.name} (${e.title}): ${e.desc}`).join('\n');
-      const out = `${this.world.keeper.prefix}: "These entities inhabit the immediate space:"\n${entityList}`;
+    if (verb === 'entities' || verb === 'apps' || verb === 'manifest' || verb === 'things' || (verb === 'look' && !args) || (verb === 'ls' && !args)) {
+      const appList = this.world.entities.map(e => `  * ${e.name} (${e.app ? e.app.title : e.title}): ${e.desc} [${e.app ? e.app.format : 'app'}]`).join('\n');
+      const out = `${this.world.keeper.prefix}: "These applications inhabit the immediate station:\n${appList}\nOpen any with '${this.world.openVerb || 'open'} <name>'."`;
       this.recordCommand({ text, verb, out, failed: false });
       return { out };
     }
 
-    // 3. Known verb on its own (no args)
+    // 7. Known verb on its own (no args)
     if (isKnownVerb && !args) {
       const verbObj = this.world.verbs.find(v => v.name.toLowerCase() === verb);
       const out = `${this.world.keeper.prefix}: "${verbObj.help}"`;
@@ -168,7 +251,7 @@ class CommandSession {
       return { out };
     }
 
-    // 4. Entity query or interaction
+    // 8. Entity query or interaction
     let targetEntity = this.findEntity(args);
     let effectiveVerb = verb;
 
@@ -179,7 +262,7 @@ class CommandSession {
         const out = [
           `[ENTITY: ${targetEntity.title.toUpperCase()}]`,
           targetEntity.desc,
-          `${this.world.keeper.prefix}: "This entity responds to: ${verbsReachable.join(', ')}."`
+          `${this.world.keeper.prefix}: "This entity responds to: ${verbsReachable.join(', ')}. Open screen via '${this.world.openVerb || 'open'} ${targetEntity.name}'."`
         ].join('\n');
         this.recordCommand({ text, verb: 'query', entity: targetEntity.name, out, failed: false });
         return { out };
@@ -205,7 +288,7 @@ class CommandSession {
         const out = [
           `[${targetEntity.title.toUpperCase()}]`,
           targetEntity.desc,
-          `${this.world.keeper.prefix}: "You may reach it with: ${verbsReachable.join(', ')}."`
+          `${this.world.keeper.prefix}: "You may reach it with: ${verbsReachable.join(', ')}. Open app screen via '${this.world.openVerb || 'open'} ${targetEntity.name}'."`
         ].join('\n');
         this.recordCommand({ text, verb: effectiveVerb, entity: targetEntity.name, out, failed: false });
         return { out };
@@ -218,7 +301,7 @@ class CommandSession {
       }
     }
 
-    // 5. Unknown verb or unrecognizable syntax
+    // 9. Unknown verb or unrecognizable syntax
     if (this.world.unknownResponseGenerators && this.world.unknownResponseGenerators.length > 0) {
       const generatorIndex = (text.length + this.history.length) % this.world.unknownResponseGenerators.length;
       const generator = this.world.unknownResponseGenerators[generatorIndex];
@@ -244,9 +327,21 @@ class CommandSession {
     }
 
     const lower = text.toLowerCase();
-    const isReseed = (lower === 'new world' || lower === 'new-world' || lower === 'reseed' || lower === this.world.reseedVerb);
+    const isReseed = (
+      lower === 'new world' ||
+      lower === 'new-world' ||
+      lower === 'reseed' ||
+      lower.startsWith('new world ') ||
+      lower === (this.world.reseedVerb || '').toLowerCase()
+    );
 
     if (isReseed) {
+      let concept = this.world.concept || 'random';
+      if (lower.startsWith('new world ')) {
+        const extra = text.slice(10).trim();
+        if (extra) concept = extra;
+      }
+
       const oldKeeper = this.world.keeper;
       const oldName = this.world.name;
       const nextSeed = ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
@@ -255,13 +350,14 @@ class CommandSession {
       const useLLM = !this.disableLLM && !options.disableLLM && process.env.LLM_DISABLED !== '1';
       if (useLLM) {
         newWorld = await generateWorldWithLLM(nextSeed, {
+          concept,
           llmBase: this.llmBase,
           timeout: 25000
         });
       }
 
       if (!newWorld) {
-        newWorld = generateWorld(nextSeed);
+        newWorld = generateWorld(nextSeed, concept);
       }
 
       this.setWorld(newWorld);
@@ -276,6 +372,7 @@ class CommandSession {
         `[BOOT SEQUENCE INITIALIZED // SEED: ${newWorld.seed}]`,
         `NAME: ${newWorld.name}`,
         `THEME: ${newWorld.theme}`,
+        `CONCEPT: ${newWorld.concept}`,
         `KEEPER: ${newWorld.keeper.name}`,
         `---`,
         ...newWorld.script
@@ -284,11 +381,59 @@ class CommandSession {
       return {
         out,
         reseeded: true,
+        returnToConcept: true,
         world: newWorld
       };
     }
 
-    // For standard commands, prefer LLM in-character response if available
+    // Go Home check
+    const isHome = (
+      lower === 'home' ||
+      lower === 'overview' ||
+      lower === 'close' ||
+      lower === (this.world.homeVerb || '').toLowerCase()
+    );
+
+    if (isHome) {
+      const prevApp = this.currentApp;
+      this.currentApp = null;
+      const appName = prevApp ? (prevApp.app ? prevApp.app.title : prevApp.title) : 'apparatus';
+      const out = `${this.world.keeper.prefix}: "You step back from the ${appName} and return to the central overview."`;
+      this.recordCommand({ text, verb: 'home', out, failed: false });
+      return { out, closeApp: true };
+    }
+
+    // Open App check: live-interpreted via LLM if available
+    const parts = text.split(/\s+/);
+    const verb = parts[0].toLowerCase();
+    const args = parts.slice(1).join(' ').trim();
+    const isOpenVerb = (verb === 'open' || verb === (this.world.openVerb || '').toLowerCase());
+
+    if (isOpenVerb && args) {
+      const targetEntity = this.findEntity(args);
+      if (targetEntity) {
+        this.currentApp = targetEntity;
+        const appScreen = await interpretAppWithLLM(this.world, targetEntity.name, {
+          llmBase: this.llmBase,
+          disableLLM: this.disableLLM || options.disableLLM
+        });
+
+        const out = [
+          `[OPENING APPARATUS: ${appScreen.title}]`,
+          appScreen.screen,
+          `${this.world.keeper.prefix}: "The ${appScreen.title} is live. Control: '${appScreen.element.label}' [action: ${appScreen.element.action}]. Return via '${this.world.homeVerb}'."`
+        ].join('\n');
+
+        this.recordCommand({ text, verb: 'open', entity: targetEntity.name, out, failed: false });
+        return {
+          out,
+          openApp: targetEntity.name,
+          app: appScreen
+        };
+      }
+    }
+
+    // Standard in-character command generation via LLM
     const useLLM = !this.disableLLM && !options.disableLLM && process.env.LLM_DISABLED !== '1';
     if (useLLM) {
       try {
@@ -307,7 +452,7 @@ class CommandSession {
       }
     }
 
-    // Automatic fallback to deterministic engine
+    // Fallback to deterministic engine
     return this.executeFallback(rawText);
   }
 }
