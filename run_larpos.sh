@@ -17,7 +17,8 @@ addgroup kiosk video
 addgroup kiosk input
 
 mkdir -p /opt/larpos/frontend
-chown -R kiosk:kiosk /opt/larpos
+mkdir -p /var/larpos/state /var/larpos/bins
+chown -R kiosk:kiosk /opt/larpos /var/larpos
 
 cat << 'EOF' > /usr/sbin/autologin
 #!/bin/sh
