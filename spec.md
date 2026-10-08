@@ -139,33 +139,60 @@ straight into a world):
 - The in-world `new world` / reseed verb returns to this concept screen (fresh idea,
   or random).
 
-### 5. Generated applications, not just entities (Nathan, 2026-10-08)
+### 5. Larp-script interpreter: apps as scripts, rendered live (Nathan, 2026-10-08)
 
-Entities are not only queryable things — every entity is also a **generated
-application**:
+The Larp script is the whole OS as a *document*. Apps are not pre-rendered static
+screens — they are **written in the script**, and an **interpreter** turns a script
+section into something that runs. The AI does the translation, live, at open time.
 
-- Each entity's spec gains `app`: a generated title, a `screen` (the app's own
-  full-viewport content/scene description in the world's idiom), and at least one
-  **interactive element** the app has (dial, valve, register, mirror, hatch, … —
-  named per-world) with behavior: interacting with it produces an in-world
-  effect/response from the engine (LLM-generated in-character, combinatorial
-  fallback offline).
-- The world's verb set includes the per-world word for *opening an app* and for
-  *going home* (back to the desktop/overview). The UI supports it: from the overview
-  (the keeper + the list of apps) you can open an app (verb or clicking its entry),
-  which swaps the view to the app's generated screen (same kiosk, same palette,
-  app-titled header), and you can always go home.
-- Apps render as real UI in the browser (HTML/CSS from the generated spec + a bit of
-  layout logic), not just text logs: the app screen has its own look within the
-  world palette (e.g. the "dial" is an actual styled control you can turn via the
-  input or clicking). The *format* of what an app even is varies per world — a
-  pressure gauge, a mirror, a filing cabinet, a mouth. That variability is the point.
-- Selftest additions: every entity has an `app` with an interactive element;
-  the open-app and go-home verbs work; concept-screen flow is reachable (GET / shows
-  the concept screen before any world exists); the concept string flows into
-  generation (same concept + different randoms → worlds both *about* the concept;
-  verify via the LLM path when available, combinatorial path asserts the concept is
-  stored and referenced in theme).
+Architecture (two layers):
+
+- **Layer 1 — the Larp script (boot time):** the LLM generates the full world spec
+  once. Each app is *described*, not rendered: title, what it is, its interactive
+  element(s) (dial/valve/register/mirror/hatch... named per-world), its vibe. This
+  is the app's *script* — compact, stored in the world spec, served at /api/world.
+  This is the catalog.
+- **Layer 2 — the interpreter (open time):** when you open app X, the interpreter
+  takes (app description + world context + palette + your interaction) and
+  **generates the actual running screen + its behavior live** — not from a cached
+  static HTML. The app is a spec that gets *instantiated* the moment you open it.
+
+Interpretation policy (Nathan, 2026-10-08 — the drift is the point, not a bug):
+
+- The LLM is non-deterministic, so opening an app **may** produce a slightly
+  different instantiation than last time, **or** the same one. We do NOT force
+  variety or force stability — we let the model be what it is. "You don't intend for
+  things to differ, but they will" is the intended behavior, not an accident to
+  paper over.
+- **Held while open:** once an app instance is rendered, it does NOT re-roll while
+  you are using it (no flicker under the cursor). Reinterpret happens on
+  close/reopen, driven by the model's natural variance.
+- **Never a dead screen (the one guard):** if the LLM returns a broken/empty
+  app render, the interpreter falls back to a generic shell for that app (title +
+  the named interactive element, minimal layout) rather than a white screen. The
+  kiosk never dies.
+- **Offline never hangs:** with the LLM unreachable, the interpreter's combinatorial
+  fallback renders a valid app from the description so the app still opens.
+
+UI contract:
+
+- From the overview (keeper + app list) you open an app (verb or click) -> the view
+  swaps to that app's *live-interpreted* screen (same kiosk, same palette,
+  app-titled header). The app's interactive element is a REAL styled control, not
+  text. Go-home always returns to the overview.
+- The world's verb set includes the per-world word for OPENING an app and for GOING
+  HOME.
+- The FORMAT of what an app even is varies per world (a pressure gauge, a mirror, a
+  filing cabinet, a mouth). That variability is the point — the interpreter's
+  output format is itself part of the Larp script's "changes each time."
+
+Selftest additions (per this section): every entity has an app with at least one
+interactive element; the interpreter produces a valid running screen for each app
+(LLM path when up, combinatorial path when offline); open-app and go-home verbs
+work; a broken/empty LLM render exercises the generic-shell fallback (not a white
+screen). Determinism note: because the model is intentionally non-deterministic,
+do NOT assert exact-equality of live app renders across opens — assert *validity*
+(well-formed screen, has the named element, renders within palette) instead.
 
 ## Acceptance criteria
 
@@ -178,5 +205,8 @@ application**:
    This is the bar — judge it by reading a few generated worlds with different seeds.
 6. Booting shows the concept screen first; typing an idea steers the generated world
    toward that idea (LLM path), random/blank still works.
-7. Every entity opens as a generated application with its own screen and at least one
-   interactive element; going home always works.
+7. Apps are written in the Larp script and *interpreted live* by the AI at open time
+   (spec = description; open = instantiated screen). Open-app and go-home always work;
+   a broken/empty LLM render falls back to a generic shell, never a white screen; the
+   app is held stable while open and may drift between closes/reopens (model variance,
+   not forced).
