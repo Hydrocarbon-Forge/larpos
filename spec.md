@@ -124,12 +124,59 @@ passing (one commit), UI + integration wired (one commit), fixes (their own comm
 Use `git config user.name "Slopworks Builder"`, `user.email
 "slopworks@hydrocarbonforge.local"` (already set in this repo).
 
+### 4. Pre-boot concept prompt (Nathan, 2026-10-08)
+
+Before the world is entered, the kiosk shows a **concept screen** (instead of jumping
+straight into a world):
+
+- A one-line title ("What should this OS be?") + a free-text input + a "random" button.
+- On submit (Enter), the prompt is passed into world generation as the **intent seed**:
+  the LLM prompt (and the combinatorial fallback's selection logic) are conditioned on
+  the user's idea — the world is *about* what they typed, not just a random one.
+- Empty input (or "random") → the existing seed-based random path.
+- The concept is stored in the world spec (`world.concept`, possibly a normalized
+  short version) and surfaces in the footer next to the seed.
+- The in-world `new world` / reseed verb returns to this concept screen (fresh idea,
+  or random).
+
+### 5. Generated applications, not just entities (Nathan, 2026-10-08)
+
+Entities are not only queryable things — every entity is also a **generated
+application**:
+
+- Each entity's spec gains `app`: a generated title, a `screen` (the app's own
+  full-viewport content/scene description in the world's idiom), and at least one
+  **interactive element** the app has (dial, valve, register, mirror, hatch, … —
+  named per-world) with behavior: interacting with it produces an in-world
+  effect/response from the engine (LLM-generated in-character, combinatorial
+  fallback offline).
+- The world's verb set includes the per-world word for *opening an app* and for
+  *going home* (back to the desktop/overview). The UI supports it: from the overview
+  (the keeper + the list of apps) you can open an app (verb or clicking its entry),
+  which swaps the view to the app's generated screen (same kiosk, same palette,
+  app-titled header), and you can always go home.
+- Apps render as real UI in the browser (HTML/CSS from the generated spec + a bit of
+  layout logic), not just text logs: the app screen has its own look within the
+  world palette (e.g. the "dial" is an actual styled control you can turn via the
+  input or clicking). The *format* of what an app even is varies per world — a
+  pressure gauge, a mirror, a filing cabinet, a mouth. That variability is the point.
+- Selftest additions: every entity has an `app` with an interactive element;
+  the open-app and go-home verbs work; concept-screen flow is reachable (GET / shows
+  the concept screen before any world exists); the concept string flows into
+  generation (same concept + different randoms → worlds both *about* the concept;
+  verify via the LLM path when available, combinatorial path asserts the concept is
+  stored and referenced in theme).
+
 ## Acceptance criteria
 
 1. `node app/server.js` (zero deps) serves `/`, `/api/world`, `/api/command` on :8080.
-2. `node app/selftest.js` passes.
+2. `node app/selftest.js` passes (offline and with LLM up).
 3. Two boots (seeds) produce clearly different worlds; same seed reproduces exactly.
 4. `build.sh` wires the app into the image via skel dir; `run_larpos.sh` points the
    kiosk at the engine. (Image build itself left as manual step.)
 5. The fiction is *good*: the worlds feel inhabited and coherent, not template fill.
    This is the bar — judge it by reading a few generated worlds with different seeds.
+6. Booting shows the concept screen first; typing an idea steers the generated world
+   toward that idea (LLM path), random/blank still works.
+7. Every entity opens as a generated application with its own screen and at least one
+   interactive element; going home always works.
