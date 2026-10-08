@@ -47,7 +47,7 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
     fi
 
     # Launch Cage with Chromium in clean user mode!
-    exec cage -- firefox-esr --kiosk https://google.com
+    exec cage -- firefox-esr --kiosk http://127.0.0.1:8080/
 fi
 EOF
 

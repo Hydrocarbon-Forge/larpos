@@ -1,0 +1,1282 @@
+// app/world.js — Coherent seeded world generator for LarpOS
+
+const { PRNG } = require('./prng');
+
+const ARCHETYPES = [
+  {
+    id: 'brine_beacon',
+    nameTemplates: [
+      (p) => `PHAROS ${p.choice(['IV', 'VII', 'IX', 'XII'])} // THE GLASS REACHES`,
+      (p) => `SALT-REGISTER AT CAPE ${p.choice(['MUTE', 'TALLOW', 'SPENT-COAST', 'BLACK-WATER'])}`,
+      (p) => `BELL-STATION ${p.int(10, 89)} // MERCURY APERTURE`,
+      (p) => `THE SOUNDING LOG OF STATION ${p.choice(['NORTH-BY-DRIFT', 'SEAWARD-VOID', 'IRON-REEF'])}`,
+      (p) => `LENS-VAULT ${p.choice(['EPSILON', 'CORVO', 'OLD-BRINE'])} // ZERO FATHOMS`
+    ],
+    themes: [
+      'abandoned lighthouse control desk, 1904; the sea turned to solid green glass three months ago',
+      'submerged semaphore gallery in the silt doldrums, where brass bells ring without ropes',
+      'brine-crusted sounding pulpit perched over an ocean that has forgotten how to produce waves',
+      'fog-station watchdesk at the edge of the glass gulf; whale-tallow wicks burn without smoke'
+    ],
+    palettes: [
+      ['#09131b', '#0f2537', '#4ecdc4', '#cbe3db', '#e07a5f'],
+      ['#071013', '#11222c', '#2ec4b6', '#edf2f4', '#ff9f1c'],
+      ['#0b1411', '#162b23', '#52b788', '#d8f3dc', '#e9c46a']
+    ],
+    keepers: [
+      {
+        name: 'Corvo, Third Keeper of the Brass Lens',
+        personality: 'half-blind from whale-tallow smoke; deaf to shouting but flinches at every shift in atmospheric draft',
+        idiom: 'maritime sounding measurements, tallow grades, fathom tallies, and brine sediment',
+        prefix: 'Corvo',
+        unknownResponses: [
+          (cmd) => `Corvo tilts his cataract-clouded eyes toward the copper ceiling: "You mutter '${cmd}' into the sounding tube as if the salt cared. The gallery only answers: strike, unseal, listen, stoke, tally, or hail."`,
+          (cmd) => `Corvo wipes grease from his thumbs onto his wool bib: "There is no tally for '${cmd}' in the admiralty ledger. Speak in things that ring or measure."`
+        ]
+      },
+      {
+        name: 'Maura of the Fog Signals',
+        personality: 'keeps the shears tied to her wrist with tarred hemp; convinced the mainland slipped into the silt last winter',
+        idiom: 'foghorn resonance, barometer drops, tallow grease, and dead gull tallies',
+        prefix: 'Maura',
+        unknownResponses: [
+          (cmd) => `Maura does not drop her tallow scraper: "'${cmd}' is not in the signal code, stranger. Try hail for the watch rules, or strike, unseal, listen, stoke, or tally."`,
+          (cmd) => `Maura taps the barometer glass with a broken fingernail: "'${cmd}' won't trim the wicks. We have work with the bells and the lead."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'The water depth increases by four fathoms whenever spoken into the brass funnel.',
+      'Salt corrodes any sentence containing an apology before it can reach the logbook.',
+      'No bullseye lens may be polished while the horizon remains horizontal.',
+      'A bell rung under glass only warns the drowned.',
+      'Tallow burned after midnight leaves gray grease that spells maritime initials.',
+      'The barometer needle cannot point to storm if all three keepers are silent.'
+    ],
+    helpVerb: 'hail',
+    reseedVerb: 'cast',
+    verbsPool: [
+      { name: 'strike', help: 'strike [bell/lead] — swing the padded copper mallet to sound a bronze or glass entity.' },
+      { name: 'unseal', help: 'unseal [phial/folio] — crack the bitumen wax seal to inspect preserved contents.' },
+      { name: 'listen', help: 'listen [target] — press ear to casing or sea-pipe to catch the acoustic tail.' },
+      { name: 'stoke', help: 'stoke [burner/wick] — feed mutton tallow or whale grease into the draft chamber.' },
+      { name: 'tally', help: 'tally [target] — notch a knife-mark into the register to record the state of an apparatus.' },
+      { name: 'hail', help: 'hail — list the beacon watch-verbs and operational codes.' },
+      { name: 'cast', help: 'cast — cast the lead into the glassy void to drift toward another station (reboot).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'mercury-phial',
+        title: 'Mercury Phial',
+        aliases: ['phial', 'mercury', 'vial', 'quicksilver'],
+        kind: 'sealed hydrographic vial',
+        desc: 'A heavy glass bottle of oxidized quicksilver sealed with black bitumen. The label reads: ADMIRALTY HYDROGRAPHIC STORE, 1904.',
+        reachVerbs: ['unseal', 'listen', 'strike', 'tally'],
+        responses: {
+          unseal: 'You peel back the brittle bitumen with a thumb. The mercury does not pour; it climbs the neck of the glass like a cold silver caterpillar and hums the water temperature at forty fathoms: zero degrees, precisely.',
+          listen: 'You hold the phial to your ear. Inside the heavy glass, you hear no liquid sloshing—only the high, thin whine of telegraph wire vibrating in a gale sixty miles north.',
+          strike: 'The bottle rings like a ship chronometer. The quicksilver quivers into five concentric rings that form the word: STILL.',
+          tally: 'You carve a small notch next to the Admiralty stamp. Gray oxide flakes away like dried moth wings.'
+        }
+      },
+      {
+        name: 'sounding-lead',
+        title: 'Sounding Lead',
+        aliases: ['lead', 'sounding', 'rope', 'line'],
+        kind: 'weighted sounding line',
+        desc: 'Twenty fathoms of tarred hemp line knotted with lead tallies, encrusted in brittle barnacles that click when the tide shifts.',
+        reachVerbs: ['listen', 'strike', 'tally', 'unseal'],
+        responses: {
+          listen: 'Leaning over the hawsehole, the line vibrates in your palm. A rhythmic, muffled clicking rises through the hemp—the barnacles talking to the floor of the gulf.',
+          strike: 'You rap the lead weight against the cast-iron rim. A dull, heavy thud resounds through the foundations, answered three seconds later by a deeper groan beneath the stone.',
+          tally: 'You count the greasy rag tallies: five, ten, fifteen fathoms. At eighteen fathoms, someone has knotted in a strand of coarse black horsehair.',
+          unseal: 'You untie the greasecloth protecting the bottom hollow of the weight. The tallow plug is pressed with white river-sand that does not belong to this ocean.'
+        }
+      },
+      {
+        name: 'prism-housing',
+        title: 'Prism Housing',
+        aliases: ['prism', 'lens', 'fresnel', 'housing'],
+        kind: 'revolving brass optic apparatus',
+        desc: 'The great revolving brass cage of the Fresnel lens; eight tiers of bullseye glass reflecting an empty, frozen horizon.',
+        reachVerbs: ['stoke', 'listen', 'strike', 'tally'],
+        responses: {
+          stoke: 'You turn the tallow valve into the mantle. A hiss of vaporized mutton fat catches the pilot wick, bathing the brass gears in thick, warm yellow brilliance.',
+          listen: 'The brass clockwork ticks with the heavy cadence of a church tower. Between ticks, you hear the bullseye glass straining against the cold outside air.',
+          strike: 'Your knuckle against the central bullseye produces a crystal chime that hangs in the air for twenty heartbeats. Out on the glass sea, a flash answers.',
+          tally: 'You check the brass revolution counter: 418,922 turns since the log began. The brass gear tooth for zero is worn almost flat.'
+        }
+      },
+      {
+        name: 'drowned-bell',
+        title: 'Drowned Bell',
+        aliases: ['bell', 'drowned', 'bronze'],
+        kind: 'submerged fog bell',
+        desc: 'A green-bronze fog bell caught in the lower seawater intake grating, its iron clapper wrapped in matted kelp.',
+        reachVerbs: ['strike', 'listen', 'unseal', 'tally'],
+        responses: {
+          strike: 'You strike the intake pipe with your mallet. The drowned bell below answers with a long, water-strangled moan that sets the puddle around your boots shivering.',
+          listen: 'You press your ear against the cold iron grate. The kelp around the clapper swishes slowly, sighing like someone turning over in wet wool blankets.',
+          unseal: 'You reach through the bars and tear a handful of black kelp from the rim. Beneath the weed, raised Latin letters read: NON SIBI SED AEQUORI.',
+          tally: 'You notch the intake rim. The salt-crust crumbles, revealing seven notches already gouged there by earlier watches.'
+        }
+      },
+      {
+        name: 'logbook-folio-42',
+        title: 'Logbook Folio 42',
+        aliases: ['logbook', 'folio', 'folio-42', 'book', 'ledger'],
+        kind: 'water-swollen calfskin record',
+        desc: 'A calfskin ledger swollen to three times its thickness by brine, held shut by a rusted iron clasp.',
+        reachVerbs: ['unseal', 'listen', 'tally'],
+        responses: {
+          unseal: 'You force the rusted clasp open. The page reveals purple iron-gall ink: "Day 91: The gulls landed upon the water and did not sink. When the boy threw a stone, it skittered two miles into the fog."',
+          listen: 'Flipping the stiff parchment close to your ear sounds like dry salt blowing across slate.',
+          tally: 'You sign your watch initials on the margin. The ink is swallowed instantly by the thirsty, damp calfskin.'
+        }
+      },
+      {
+        name: 'tallow-trough',
+        title: 'Tallow Trough',
+        aliases: ['trough', 'tallow', 'fat', 'basin'],
+        kind: 'copper fuel reservoir',
+        desc: 'A wide copper basin filled with congealed, yellow mutton tallow, marked with carved tally marks of dead gulls.',
+        reachVerbs: ['stoke', 'tally', 'unseal'],
+        responses: {
+          stoke: 'You scoop a slab of cold mutton fat and feed it into the furnace chute. The iron plate glows dull orange; the scent of roasted marrow fills the cabin.',
+          tally: 'You count the knife-notches along the copper lip: forty-four gulls. The last notch is fresh, with a speck of dried blood in the groove.',
+          unseal: 'You dig your knife into the center of the cold fat. Two inches down, the blade hits something hard: an unopened brass cartridge case.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[PHAROS SECTOR-LOG // WATCH CYCLE ${p.int(100, 999)}]`,
+      `${keeper.prefix.toUpperCase()}: "Keep your boots off the brass pipe. The sea went hard three months ago, and every vibration travels forty miles."`,
+      `${keeper.prefix.toUpperCase()}: "The ${entities[0].title} is sitting on the console; don't jar the seal unless you have the sounding code ready."`,
+      `${keeper.prefix.toUpperCase()}: "If you've come from the mainland, forget the roads. There is only the glass and what we burn in the mantle."`,
+      `[SOUNDING TUBE: a faint drone in G-sharp echoes from below the deck plates]`
+    ]
+  },
+  {
+    id: 'dead_god_cranium',
+    nameTemplates: [
+      (p) => `CALVARIA-${p.choice(['IV', 'IX', 'XIII', 'XXVII'])} // SUTURE REGISTRY`,
+      (p) => `THE CRANIAL DRAINAGE SUITE // LOBE ${p.int(2, 8)}`,
+      (p) => `MARROW-COMMUNION DIALECTIC // VAULT ${p.choice(['ALPHA', 'BETA', 'OMEGA'])}`,
+      (p) => `OSSARY OF THE FALLEN SERAPH // SECTOR ${p.int(10, 99)}`,
+      (p) => `THE TREPANNED HEAVEN // BONE TELEMETRY`
+    ],
+    themes: [
+      'a copper-wired trepanning gallery bolted into the calcified frontal lobe of a fallen celestial being',
+      'an ossuary archive where memories are recovered by driving silver pins through petrified dura mater',
+      'a surgical scriptorium inside an immense fossilized skull; cerebrospinal fluid flows like cold tea',
+      'the vestibular chamber of a dead titan, where pilgrims calibrate prayer needles against bone resonance'
+    ],
+    palettes: [
+      ['#12090b', '#2b1117', '#c1666b', '#ebd4cb', '#d4af37'],
+      ['#0f0d11', '#211a24', '#b5838d', '#f7ede2', '#e5989b'],
+      ['#140f0b', '#2e1c14', '#ddbea9', '#ffe8d6', '#a53860']
+    ],
+    keepers: [
+      {
+        name: 'Sister Vespera, Clerk of the Marrow',
+        personality: 'weighs bone shavings in miniature brass scales; speaks as if reciting an autopsy on someone standing before her',
+        idiom: 'anatomical Latin, suture lines, bone density, and surgical remorse',
+        prefix: 'Sister Vespera',
+        unknownResponses: [
+          (cmd) => `Sister Vespera taps her ivory stylus on the bone rim: "'${cmd}' is no incision recognized by the Calvaria Synod. Speak the litany, or trepan, palpate, confess, incise, or cauterize."`,
+          (cmd) => `Sister Vespera dips a linen sponge into lead water: "'${cmd}' will not relieve cranial pressure. Choose an instrument that fits the bone."`
+        ]
+      },
+      {
+        name: 'Anatomist Malakor',
+        personality: 'has silver wires threaded through his fingernails; insists the celestial skull is still thinking, only very slowly',
+        idiom: 'cerebrospinal drainage, dura mater tension, bone resonance, and petrified nerves',
+        prefix: 'Malakor',
+        unknownResponses: [
+          (cmd) => `Malakor winces as the suture above him twitches: "Silence that '${cmd}'. The skull mirrors discord. Use the litany, or trepan, palpate, or confess."`,
+          (cmd) => `Malakor measures a cranial fissure with calipers: "No nerve reacts to '${cmd}'. Try words the marrow knows."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'Any thought retained longer than thirty minutes calcifies into porous calcium carbonate.',
+      'Cerebrospinal fluid cannot flow past the third rib without petition in whispering Latin.',
+      'The bone vault mirrors whatever was thought during the previous thunderclap.',
+      'You may not measure the soul while your boot-heels rest upon bare marrow.',
+      'Silver pins driven into the frontal lobe extinguish candle flames within twelve yards.',
+      'Memories spoken in anger leave gray scorch marks along the coronal suture.'
+    ],
+    helpVerb: 'litany',
+    reseedVerb: 'commune',
+    verbsPool: [
+      { name: 'trepan', help: 'trepan [suture/fissure] — turn the serrated crown bit into the bone to vent pressure or memory.' },
+      { name: 'palpate', help: 'palpate [nerve/organ] — press fingers against the calcified tissue to feel the galvanic pulse.' },
+      { name: 'confess', help: 'confess [target] — whisper a grievance into a bone cavity to induce chemical response.' },
+      { name: 'incise', help: 'incise [membrane/psalm] — cut the preserved fibrous shroud to reveal inscribed tissue.' },
+      { name: 'cauterize', help: 'cauterize [target] — apply heated iron wire to quiet harmonic squeal in the bone.' },
+      { name: 'litany', help: 'litany — recite the canonical surgical procedures and available instruments.' },
+      { name: 'commune', help: 'commune — drink the bitter cerebrospinal draught to awaken in another skull (reboot).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'suture-omega',
+        title: 'Suture Omega',
+        aliases: ['suture', 'omega', 'fissure', 'seam'],
+        kind: 'petrified coronal cranial seam',
+        desc: 'The great zig-zag bone seam across the vault ceiling, leaking chilled amber marrow that never hits the floor.',
+        reachVerbs: ['trepan', 'palpate', 'confess', 'cauterize'],
+        responses: {
+          trepan: 'You place the brace against the seam and turn. The bit bites into ancient ivory; a vapor smelling of incense and burned zinc puffs out with a soft gasp.',
+          palpate: 'Your fingers press into the serrated fissure. A slow, massive pulse—one beat every two minutes—shakes the marrow under your nails.',
+          confess: 'You speak your regret into the gap. The amber marrow curds into pearlescent beads that roll backward into the ceiling.',
+          cauterize: 'You draw the red-hot iron along the seam. The bone sizzles white; a voice like eight flutes playing unison chords resonates through your teeth.'
+        }
+      },
+      {
+        name: 'ivory-stylus',
+        title: 'Ivory Stylus',
+        aliases: ['stylus', 'needle', 'pin', 'ivory'],
+        kind: 'carved bone telemetry needle',
+        desc: 'A twelve-inch needle carved from a martyr\'s ulna, vibrating whenever held within three paces of the optic canal.',
+        reachVerbs: ['palpate', 'incise', 'confess', 'trepan'],
+        responses: {
+          palpate: 'As you balance the needle across two fingers, its tip swings steadily northward toward the Great Pit, humming an eerie B-flat.',
+          incise: 'You draw the sharp point across the bone floor. It cuts clean as grease, leaving a luminous white line that glows like phosphorus.',
+          confess: 'Whispering to the stylus makes its needle-eye sweat a drop of clear rosewater.',
+          trepan: 'You slide the stylus into an existing trepan hole. Deep within the vault, a chime like a cathedral clock sounds twelve times.'
+        }
+      },
+      {
+        name: 'dura-cistern',
+        title: 'Dura Cistern',
+        aliases: ['cistern', 'vat', 'reservoir', 'fluid'],
+        kind: 'lead-lined cerebrospinal vat',
+        desc: 'A deep vat lined with hammered lead collecting clear cerebrospinal condensate that reflects no face.',
+        reachVerbs: ['palpate', 'confess', 'cauterize', 'incise'],
+        responses: {
+          palpate: 'You dip your bare fingers into the fluid. It feels colder than snow, yet your skin does not numb; instead, every hair stands on end as you hear distant organ pipes.',
+          confess: 'You speak over the surface. The mirror-still liquid wrinkles into concentric ripples that spell out the date of your mother\'s birth.',
+          cauterize: 'Touching the red wire to the surface produces a blue flash without steam. The surface solidifies for five seconds into transparent ice.',
+          incise: 'You slice the scum layer with your scalpel. Beneath it, miniature silver minnows scatter into the dark depths of the lead tank.'
+        }
+      },
+      {
+        name: 'trepan-drill',
+        title: 'Trepan Drill',
+        aliases: ['drill', 'brace', 'bit', 'trepan'],
+        kind: 'geared surgical brace',
+        desc: 'A heavy brass-and-steel brace fitted with a circular crown bit, encrusted with dried myrrh and powdered bone.',
+        reachVerbs: ['cauterize', 'palpate', 'trepan'],
+        responses: {
+          cauterize: 'You pass the flame across the serrated teeth. The dried myrrh crackles into fragrant blue smoke that cleanses the metallic stench of the room.',
+          palpate: 'The gears turn with oiled silk smoothness. The circular blade is sharp enough to cut silk floating in the air.',
+          trepan: 'You test the spring tension against your palm; the mechanism clicks with clinical, irrevocable precision.'
+        }
+      },
+      {
+        name: 'ossified-psalm',
+        title: 'Ossified Psalm',
+        aliases: ['psalm', 'cartilage', 'rib', 'inscription'],
+        kind: 'calcified rib cartilage scroll',
+        desc: 'A curved strip of petrified costal cartilage inscribed with microscopic Latin cursive using a hot diamond point.',
+        reachVerbs: ['incise', 'palpate', 'confess'],
+        responses: {
+          incise: 'You scrape away the surface lime. The lettering underneath reads: "We did not slay the cherub; we merely unbolted the skull to see what held the sky aloft."',
+          palpate: 'The cartilage flexes under your thumbs like horn, warming rapidly to body temperature.',
+          confess: 'You breathe your secret upon the Latin characters; they turn dark violet as if soaked in fresh red wine.'
+        }
+      },
+      {
+        name: 'optic-chasm',
+        title: 'Optic Chasm',
+        aliases: ['chasm', 'canal', 'optic', 'socket'],
+        kind: 'empty celestial eye socket',
+        desc: 'A yawning circular opening thirty feet across, looking out upon a starless black void that smells of ozone and lilies.',
+        reachVerbs: ['confess', 'palpate', 'cauterize'],
+        responses: {
+          confess: 'You whisper into the yawning dark. Two miles away in the void, a small golden spark flares, burns for three seconds, and gently goes out.',
+          palpate: 'You lean over the polished bone ledge. The air rising from the abyss is entirely dry, smelling of linen dried in ancient sunlight.',
+          cauterize: 'You cast a glowing cinder into the chasm. As it falls, it leaves a trail of green sparks that reveals immense bone pillars descending into infinity.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[CRANIAL TELEMETRY RECORD // SUTURE CYCLE ${p.int(10, 99)}]`,
+      `${keeper.prefix.toUpperCase()}: "Tread lightly upon the sphenoid bone. We are six hours into the drainage protocol."`,
+      `${keeper.prefix.toUpperCase()}: "The ${entities[0].title} is vibrating again; whatever this seraph remembered before it fell is beginning to warm."`,
+      `${keeper.prefix.toUpperCase()}: "Do not ask when the surgery ends. The skull is three hundred leagues long; we have only cleared the forehead."`,
+      `[A RESONANT TREMOR: the calcified vault groans as the cerebrospinal fluid shifts in the cistern]`
+    ]
+  },
+  {
+    id: 'ash_railway',
+    nameTemplates: [
+      (p) => `CAR-04 // THE LINE OF ASH`,
+      (p) => `WAYSTATION ${p.choice(['ZVEZDA-9', 'TUNDRA-4', 'PERVOMAYSK', 'SEVER-12'])} TELEGRAPH`,
+      (p) => `SIBERIAN TUBE-SWITCH REGISTER ${p.int(10, 88)}`,
+      (p) => `THE FROSTED SAMOVAR MANIFEST // SECTION ${p.choice(['NORTH', 'SOUTH', 'DEAD-BUFFER'])}`,
+      (p) => `NARROW-GAUGE COURIER ${p.int(100, 999)} // BUFFER ZERO`
+    ],
+    themes: [
+      'a stalled armored carriage on an infinite narrow-gauge rail through black tundra; the samovar boils brackish meltwater',
+      'a sub-permafrost railway switchbox where telegrams arrive as embossed tin strips and the frost never thaws',
+      'the postal caboose of an abandoned locomotive cutting across frozen bogs beneath perpetual aurora',
+      'a junction depot at kilometer 800; the tracks behind you have already been swallowed by creeping peat'
+    ],
+    palettes: [
+      ['#0d131a', '#1a2530', '#38b000', '#b7e4c7', '#e5989b'],
+      ['#0b0e14', '#182026', '#48cae4', '#e0e1dd', '#9b5de5'],
+      ['#11151c', '#212d40', '#364954', '#f5f5f5', '#d64045']
+    ],
+    keepers: [
+      {
+        name: 'Conductor Yul',
+        personality: 'stamps expired travel tokens with a heavy lead punch; smells of cheap makhorka and cabbage lard; refuses to glance out the window',
+        idiom: 'axle grease, delayed departures, rail switches, and frostbite warnings',
+        prefix: 'Conductor Yul',
+        unknownResponses: [
+          (cmd) => `Conductor Yul taps his lead punch against his tin badge: "None of that '${cmd}' foolishness in Car 04. Check the timetable, comrade, or scrape, inspect, switch, stamps, or stoke."`,
+          (cmd) => `Conductor Yul blows cigarette ash off the ledger: "'${cmd}' isn't on the ministry transit schedule. Keep to the railway verbs."`
+        ]
+      },
+      {
+        name: 'Dispatcher Nina',
+        personality: 'speaks through an acoustic horn stuffed with felt; tallies unoccupied passenger berths on a horn-bead abacus',
+        idiom: 'telegraph ribbon, semaphore arms, coal rations, and rail clearances',
+        prefix: 'Dispatcher Nina',
+        unknownResponses: [
+          (cmd) => `Nina\'s voice rattles through the horn: "Switchboard rejects command '${cmd}'. Consult timetable or use scrape, inspect, switch, stamps, or stoke."`,
+          (cmd) => `Nina slides an abacus bead: "'${cmd}' carries no priority clearance on this line."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'The train does not stop at any waystation where a lantern is burning.',
+      'Ticket numbers ending in zero do not belong to passengers who can be fed.',
+      'Frost scraped from the carriage glass must never be allowed to melt in a teacup.',
+      'Any telegram received after midnight was written by the locomotive itself.',
+      'Passengers who sleep with their boots off forfeit their berth to the ballast.',
+      'The narrow gauge narrows by one millimeter for every hundred versts traveled.'
+    ],
+    helpVerb: 'timetable',
+    reseedVerb: 'derail',
+    verbsPool: [
+      { name: 'scrape', help: 'scrape [window/pipe] — clear black rime or coal soot from an apparatus to read markings.' },
+      { name: 'inspect', help: 'inspect [manifest/trunk] — examine passenger papers, baggage, or mechanical linkages.' },
+      { name: 'switch', help: 'switch [lever/wire] — throw track switch or redirect pneumatic telegraph line.' },
+      { name: 'stamps', help: 'stamps [token/docket] — validate transit voucher with the lead conductor punch.' },
+      { name: 'stoke', help: 'stoke [stove/boiler] — shovel anthracite or dried peat into the cast-iron carriage stove.' },
+      { name: 'timetable', help: 'timetable — inspect current transit schedule and carriage operation verbs.' },
+      { name: 'derail', help: 'derail — yank the emergency Westinghouse valve into total darkness (reboot world).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'frosted-pane',
+        title: 'Frosted Pane',
+        aliases: ['pane', 'window', 'glass', 'frost'],
+        kind: 'double-glazed carriage window',
+        desc: 'A heavy double-glazed window thick with black, fern-like ice crystals that obscure the tundra outside.',
+        reachVerbs: ['scrape', 'inspect', 'stoke'],
+        responses: {
+          scrape: 'You scrape a thumb-track through the rime. Outside, under a sickly mauve sky, three telegraph poles with cut wires are passing backward in absolute silence.',
+          inspect: 'The ice ferns do not grow from water; they smell of kerosene and have formed the geometric pattern of a city street map.',
+          stoke: 'Heat from the iron stove warms the bottom corner. The black frost thaws into oily yellow drops that run down the mahogany sill.'
+        }
+      },
+      {
+        name: 'samovar-spigot',
+        title: 'Samovar Spigot',
+        aliases: ['samovar', 'spigot', 'tea', 'valve'],
+        kind: 'brass water heater valve',
+        desc: 'A massive tarnished brass samovar bolted to the floor; its spigot drips scalding meltwater that smells of bog peat.',
+        reachVerbs: ['inspect', 'scrape', 'stoke', 'stamps'],
+        responses: {
+          inspect: 'The samovar is stamped with the Imperial double-headed eagle, crossed out with three chisel-gashes. The charcoal core inside is rumbling like a sleeping hound.',
+          scrape: 'You scrape green verdigris off the brass turncock. Beneath it, someone has scratched: "DO NOT DRINK WHILE CROSSING THE RIVER."' ,
+          stoke: 'You drop two lumps of pine charcoal down the central flue. The water comes to a furious boil, whistling through the steam valve in three distinct minor notes.',
+          stamps: 'You press your metal stamp against the hot brass belly; the imprint cools into a sharp silver square.'
+        }
+      },
+      {
+        name: 'passenger-ledger',
+        title: 'Passenger Ledger',
+        aliases: ['ledger', 'manifest', 'book', 'names'],
+        kind: 'canvas-bound passenger register',
+        desc: 'A canvas-bound manifest listing twenty-four berths; all berths are registered to the same family name.',
+        reachVerbs: ['inspect', 'stamps', 'scrape'],
+        responses: {
+          inspect: 'You read berth 7: "Vane, Anton — destination: Kilometre Zero — baggage: one wooden box of dry soil." The signature is written in indelible copying-pencil.',
+          stamps: 'You drive the lead punch through the margin of the latest page. A small cardboard circle falls out, printed with the letter Z.',
+          scrape: 'You scrape away a smudge of dried tea. Underneath, a handwritten note reads: "The conductor died at Omsk; the one now punching tickets is the fireman."'
+        }
+      },
+      {
+        name: 'switch-lever-3',
+        title: 'Switch Lever 3',
+        aliases: ['lever', 'switch', 'lever-3', 'handle'],
+        kind: 'iron track switch throw',
+        desc: 'An iron switch handle protruding through the floorboards, secured by a lead seal and insulated copper wire.',
+        reachVerbs: ['switch', 'inspect', 'scrape'],
+        responses: {
+          switch: 'You throw your weight against the lever. With a screech of frozen steel beneath the car, the points throw; the carriage lurches hard to port onto the siding of ash.',
+          inspect: 'The lever handle is wrapped in coarse rags to prevent frozen skin from bonding to the iron. The linkage rod vanishes into the snow beneath the carriage floor.',
+          scrape: 'You scrape rust off the brass sector plate: POSITIONS: (1) SIDING (2) BUFFER (3) GLACIER.'
+        }
+      },
+      {
+        name: 'telegraph-punch',
+        title: 'Telegraph Punch',
+        aliases: ['punch', 'telegraph', 'ticker', 'ribbon'],
+        kind: 'pneumatic message apparatus',
+        desc: 'A clockwork telegraph instrument that punches holes in dried sausage casing instead of paper ribbon.',
+        reachVerbs: ['inspect', 'scrape', 'switch'],
+        responses: {
+          inspect: 'The ticker springs to life with a dry chatter. The punched casing scrolls into the bin: ".. -- .--. --- ... ... .. -... .-.. ." (IMPOSSIBLE).',
+          scrape: 'You scrape dried tallow from the feed spindle. The tiny brass gears rotate with frantic speed.',
+          switch: 'You flip the line-selector switch. The ticking frequency drops to a slow, mournful tap... tap... tap.'
+        }
+      },
+      {
+        name: 'under-berth-trunk',
+        title: 'Under-Berth Trunk',
+        aliases: ['trunk', 'box', 'chest', 'baggage'],
+        kind: 'iron-strapped wooden footlocker',
+        desc: 'A heavy pine trunk tucked under berth 4, bound with telegraph wire; something inside settles with a soft thud whenever the train rocks.',
+        reachVerbs: ['inspect', 'scrape', 'stamps'],
+        responses: {
+          inspect: 'You pull the trunk out an inch. The stencil on the lid reads: "PROPERTY OF THE GEODETIC SURVEY — NOT TO BE OPENED UNDER ARTIFICIAL LIGHT."',
+          scrape: 'You scrape frost from the wire binding. The twisted copper wire is ice-cold, yet you feel a faint rhythmic vibration inside the wood.',
+          stamps: 'You affix an inspection seal to the hasp. The lead tag settles flat against the fir plank.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[TRANSIT DISPATCH // CAR-04 // KILOMETRE ${p.int(400, 990)}]`,
+      `${keeper.prefix.toUpperCase()}: "Sit down, traveler, and keep your elbows inside the berth. The bog-frost will take the skin right off your coat."`,
+      `${keeper.prefix.toUpperCase()}: "The ${entities[0].title} is rattling in its bracket; don't touch the iron without your wool mittens."`,
+      `${keeper.prefix.toUpperCase()}: "We passed the last border post forty versts ago. From here to the buffer, there are no stations—only peat."`,
+      `[TRACK SOUND: the rhythmic clack-clack of frozen narrow-gauge steel vibrates through your boots]`
+    ]
+  },
+  {
+    id: 'monastic_loom',
+    nameTemplates: [
+      (p) => `THE WEFT OF OUR LADY OF SHROUDS // FRAME ${p.choice(['III', 'VII', 'IX'])}`,
+      (p) => `CLOISTER-LOOM IX // SELVEDGE REGISTRY`,
+      (p) => `THE HEMP-BRAID CATECHISM // CELL ${p.int(1, 14)}`,
+      (p) => `ABBESS ELEANOR’S UNWOVEN CODEX // BEAM ${p.int(10, 40)}`,
+      (p) => `THE FLAXEN LITURGY // TWELFTH THREAD`
+    ],
+    themes: [
+      'a 14th-century cloister loom where prayer is computed in knots of raw unbleached flax; the warp has no visible end',
+      'a damp stone cell where blind nuns track planetary conjunctions by measuring the tension on twisted horsehair',
+      'an immense oak tapestry frame in an abbey crypt; the figures woven yesterday have all turned their backs',
+      'the scriptorium of unspun wool, where heresy is resolved by unpicking knots under candlelight'
+    ],
+    palettes: [
+      ['#141118', '#2a2035', '#d4a373', '#faedcd', '#9d0208'],
+      ['#101014', '#1f1e29', '#a5a58d', '#f0ebd8', '#6b705c'],
+      ['#19120c', '#332316', '#e09f3e', '#fff3b0', '#9e2a2b']
+    ],
+    keepers: [
+      {
+        name: 'Sister Beatrix the Weaver',
+        personality: 'fingers stained permanently indigo; has counted twelve thousand knots since matins without raising her eyes',
+        idiom: 'warp tension, shuttles, flax grading, and monastic horarium',
+        prefix: 'Sister Beatrix',
+        unknownResponses: [
+          (cmd) => `Sister Beatrix does not let the shuttle pause: "'${cmd}' is a tangled thread that belongs in no cloth. Speak the pattern, or shuttle, unpick, knot, feel, or card."`,
+          (cmd) => `Sister Beatrix catches a dropped stitch with an iron pin: "'${cmd}' will only fray the selvedge. Keep your speech to the weave."`
+        ]
+      },
+      {
+        name: 'The Abbess’s Proxy',
+        personality: 'whispers from behind a pierced cedar screen; judges whether a visitor is lying by the rhythm of the wooden treadles',
+        idiom: 'selvedge edges, carding combs, unpicking, and liturgical vows',
+        prefix: 'The Proxy',
+        unknownResponses: [
+          (cmd) => `The cedar screen rattles softly: "'${cmd}' violates the cloister draft. Inquire of the pattern, or shuttle, unpick, knot, feel, or card."`,
+          (cmd) => `A dry cough from behind the cedar: "The loom rejects '${cmd}'. Knot your tongue or weave in truth."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'Every dropped stitch unravels a name spoken within the chapter house.',
+      'Gold thread cannot be touched by anyone who has looked into a mirror since dawn.',
+      'The shuttle must never pass from right to left while a prayer is left incomplete.',
+      'Whatever is woven in total silence unravels the moment the chapel bell strikes.',
+      'Knots tied with wet linen outlive the stone walls that shelter them.',
+      'The pattern only becomes legible when viewed from the shadow of the crucifix.'
+    ],
+    helpVerb: 'pattern',
+    reseedVerb: 'shear',
+    verbsPool: [
+      { name: 'shuttle', help: 'shuttle [thread/bobbin] — drive the boxwood shuttle through the shed to bind warp and weft.' },
+      { name: 'unpick', help: 'unpick [knot/seam] — use the bone bodkin to undo tangled or heretical stitches.' },
+      { name: 'knot', help: 'knot [target] — tie off a thread, count a liturgical bead, or bind an entity.' },
+      { name: 'feel', help: 'feel [cloth/warp] — run blind fingertips across the tension of the linen cords.' },
+      { name: 'card', help: 'card [wool/distaff] — comb raw wool or flax with iron teeth to align fibers.' },
+      { name: 'pattern', help: 'pattern — inspect the sacred textile draft and monastic working verbs.' },
+      { name: 'shear', help: 'shear — cut the finished shroud from the beam with iron shears (reboot world).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'boxwood-shuttle',
+        title: 'Boxwood Shuttle',
+        aliases: ['shuttle', 'boxwood', 'bobbin'],
+        kind: 'hollow wooden weaving shuttle',
+        desc: 'A heavy boat-shaped shuttle carved of boxwood, worn glass-smooth by grease and friction, holding a quill of black silk.',
+        reachVerbs: ['shuttle', 'feel', 'unpick', 'knot'],
+        responses: {
+          shuttle: 'You shoot the shuttle through the parted warp threads. It flies with a swift clack-thud, leaving a hair-thin line of cold black silk across the white linen.',
+          feel: 'The wood is warm, almost feverish, and polished so slick it nearly slips from your grip. The quill inside smells of lavender and well-water.',
+          unpick: 'You pull the bobbin free. The black silk thread unwinds backward on its own for five inches, humming like a tiny cricket.',
+          knot: 'You knot the leading end of the silk to the shuttle eye. The thread tightens with a chime like a harpsichord wire.'
+        }
+      },
+      {
+        name: 'selvedge-border',
+        title: 'Selvedge Border',
+        aliases: ['selvedge', 'border', 'edge', 'margin'],
+        kind: 'densely woven textile margin',
+        desc: 'The left-hand border of the great cloth; the embroidered figures depicted there have their hoods pulled down and faces turned away.',
+        reachVerbs: ['feel', 'unpick', 'knot', 'card'],
+        responses: {
+          feel: 'Your fingers brush the tight ribbing. The threads under your skin feel surprisingly cold, like wet slate in winter.',
+          unpick: 'You slide the bone needle under the outermost border thread. As the stitch pops, a faint sigh of draft escapes through the warp.',
+          knot: 'You bind a loose end into the edge; the figures in the tapestry lean closer together, as if whispering in the wind.',
+          card: 'You comb the fringed hem. Tiny fragments of dried rose petals and incense ash fall onto the flagstones.'
+        }
+      },
+      {
+        name: 'treadle-pedals',
+        title: 'Treadle Pedals',
+        aliases: ['treadles', 'pedals', 'treadle', 'oak'],
+        kind: 'grooved oak foot levers',
+        desc: 'Four oak levers wrapped in coarse hemp cords, worn into deep foot-shaped hollows by centuries of bare Franciscan heels.',
+        reachVerbs: ['feel', 'shuttle', 'knot'],
+        responses: {
+          feel: 'You press your palm to the oak. The grain is impregnated with lanolin and candle-tallow, yielding slightly under heavy pressure.',
+          shuttle: 'You depress the second pedal. Above your head, four harness frames clatter upward, opening a clean shed four inches wide.',
+          knot: 'You lash the tension cord tighter to the lever peg. The warp above groans in three distinct harmonic intervals.'
+        }
+      },
+      {
+        name: 'distaff-of-flax',
+        title: 'Distaff of Flax',
+        aliases: ['distaff', 'flax', 'bundle', 'fibers'],
+        kind: 'dressed bundle of raw flax',
+        desc: 'A bundle of unspun Flemish flax tied with red ribbon, smelling of river silt and dried chamomile.',
+        reachVerbs: ['card', 'feel', 'unpick', 'knot'],
+        responses: {
+          card: 'You draw the iron carding teeth through the flax. The pale fibers separate like clean golden hair, static sparks jumping to your wrists.',
+          feel: 'The raw fibers are long and strong as bowstrings, surprisingly heavy in the hand.',
+          unpick: 'You untie the red ribbon. Inside the core of the bundle rests a folded scrap of sheepskin parchment.',
+          knot: 'You twist a handful of fibers into a tight cord; it resists even your full two-handed tug.'
+        }
+      },
+      {
+        name: 'counting-beads',
+        title: 'Counting Beads',
+        aliases: ['beads', 'rosary', 'counter'],
+        kind: 'carved bone tally rosary',
+        desc: 'Fifty-four beads carved from sheep knucklebones strung on twisted catgut, keeping count of the dropped stitches.',
+        reachVerbs: ['feel', 'knot', 'unpick'],
+        responses: {
+          feel: 'You slide three beads along the cord. Each bone bead is warm and inscribed with a different Latin consonant.',
+          knot: 'You tie an extra knot between the fourth and fifth beads; a bell in the convent tower tolls once.',
+          unpick: 'You loosen the catgut stopper; the beads settle together with the dry click of teeth.'
+        }
+      },
+      {
+        name: 'shear-blades',
+        title: 'Shear Blades',
+        aliases: ['shears', 'blades', 'scissors', 'iron'],
+        kind: 'spring-iron cloth shears',
+        desc: 'A pair of one-piece iron shears wrapped in greased linen to keep monastery moisture from tasting the cutting edge.',
+        reachVerbs: ['feel', 'card', 'unpick'],
+        responses: {
+          feel: 'The iron is heavy and cold. When squeezed, the blades meet with a terrifyingly clean, shearing hiss.',
+          card: 'You scrape the blade flat across the carding board; rust flakes off like red dust.',
+          unpick: 'You use the tip to slice through a knot of bleached linen; the cut ends spring apart instantly.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[CLOISTER HORARIUM // WEFT WATCH: HOUR OF TIERCE]`,
+      `${keeper.prefix.toUpperCase()}: "Keep your skirts clear of the lower treadles. The warp is strung with ninety pounds of tension."`,
+      `${keeper.prefix.toUpperCase()}: "The ${entities[0].title} was blessed this morning with salted holy water; handle it only by the boxwood horn."`,
+      `${keeper.prefix.toUpperCase()}: "We do not weave cloth to clothe men. We weave to keep the sky from coming unstitched at the hem."`,
+      `[LOOM SOUND: a rhythmic, hollow clack-thud echoes off damp limestone vaults]`
+    ]
+  },
+  {
+    id: 'flooded_kitchen',
+    nameTemplates: [
+      (p) => `THE TABLE AT 44 MARSH LANE (1974)`,
+      (p) => `THE OILCLOTH REGISTRY // FLOODLINE ${p.int(2, 9)}`,
+      (p) => `TRANSISTOR ARCHIVE // THREE INCHES OF WATER`,
+      (p) => `THE LINOLEUM DRIFT // TEA AT ${p.choice(['FOUR', 'FIVE', 'DUSK'])}`,
+      (p) => `PARLOUR REGISTER // SECTOR ${p.choice(['SCULLERY', 'PANTRY', 'CANAL-SIDE'])}`
+    ],
+    themes: [
+      'the linoleum floor is covered in two inches of dark tap water; an inductive radio murmurs football scores from 1968',
+      'a yellow Formica kitchen where tea cools forever and every cupboard door opens directly onto the canal',
+      'a flooded scullery in an east-end terrace, 1974; the wallpaper peels in long strips of floral damp',
+      'a kitchen table adrift in lukewarm tea water; the wall clock has had its minute hand removed with pliers'
+    ],
+    palettes: [
+      ['#1c1917', '#292524', '#d97706', '#fef3c7', '#059669'],
+      ['#181512', '#2c221a', '#e76f51', '#f4a261', '#2a9d8f'],
+      ['#141916', '#222e28', '#84a98c', '#cad2c5', '#52796f']
+    ],
+    keepers: [
+      {
+        name: 'Uncle George',
+        personality: 'wears a soaking wool cardigan; stirs lukewarm tea with the handle of a teaspoon; remembers where everyone put their hats fifty years ago',
+        idiom: 'drowned gardens, whistling kettles, radio valves, and ration stamps',
+        prefix: 'Uncle George',
+        unknownResponses: [
+          (cmd) => `Uncle George taps his tin mug: "Never heard that word '${cmd}' in all my days in this scullery. Try your chores, or tune, open, pour, remember, or scrape."`,
+          (cmd) => `Uncle George sighs as water ripples against his slippers: "'${cmd}' won't dry the carpet, son. Mind your manners and use proper kitchen words."`
+        ]
+      },
+      {
+        name: 'The Voice in the Bakelite Set',
+        personality: 'a crackling wireless announcer reading lost-dog notices between bursts of accordion dance tunes',
+        idiom: 'shipping forecasts, canal water levels, valve hum, and grocery lists',
+        prefix: 'The Wireless',
+        unknownResponses: [
+          (cmd) => `A burst of static crackles from the speaker: "We have no transmission under '${cmd}'. Listen to the chores, or tune, open, pour, remember, or scrape."`,
+          (cmd) => `The wireless hums in 50 Hertz: "'${cmd}' is lost in the atmospheric mush."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'Mother is always in the pantry, but you may not look into it twice in one evening.',
+      'The water rises by half an inch whenever someone mentions tomorrow.',
+      'The radio will only report the weather for towns that have ceased to exist.',
+      'You cannot butter the bread until all the silver spoons are dry.',
+      'Whatever falls into the linoleum puddle belongs to the canal by morning.',
+      'The kettle will not boil if anyone is sitting in the grandfather chair.'
+    ],
+    helpVerb: 'chores',
+    reseedVerb: 'sleep',
+    verbsPool: [
+      { name: 'tune', help: 'tune [radio/dial] — turn the bakelite knob across crackling longwave frequencies.' },
+      { name: 'open', help: 'open [drawer/tin] — pull open stuck kitchen drawers or rusted tin containers.' },
+      { name: 'pour', help: 'pour [tea/kettle] — draw dark steeped tea or rainwater across an entity.' },
+      { name: 'remember', help: 'remember [target] — peer into water reflections or watermark stains to recall faces.' },
+      { name: 'scrape', help: 'scrape [oilcloth/tin] — scrape hardened grease, sugar crust, or rust with a butter knife.' },
+      { name: 'chores', help: 'chores — check the list of kitchen duties and acceptable household verbs.' },
+      { name: 'sleep', help: 'sleep — put your head down on the damp oilcloth and wake in another year (reboot).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'bakelite-radio',
+        title: 'Bakelite Radio',
+        aliases: ['radio', 'bakelite', 'wireless', 'set'],
+        kind: 'brown valve radio receiver',
+        desc: 'A heavy brown valve receiver resting on two soggy phone directories; its tuning scale glows faint amber.',
+        reachVerbs: ['tune', 'remember', 'scrape', 'open'],
+        responses: {
+          tune: 'You twist the bakelite knob. Between gusts of white noise, a woman\'s voice sings: "...and the coal-man will never come back to the lane..." followed by the shipping forecast for Dogger and Fisher: "Visibility zero, pressure falling."',
+          remember: 'Looking into the warm yellow glow of the dial, you remember the summer before the water came up through the cellar—the smell of freshly cut lawn and warm bitumen.',
+          scrape: 'You scrape dried salt off the speaker grille. The valve hum shifts into a higher, sweeter tone.',
+          open: 'You pry off the cardboard backing. Two glass valves glow like miniature lighthouses in the dust.'
+        }
+      },
+      {
+        name: 'oilcloth-surface',
+        title: 'Oilcloth Surface',
+        aliases: ['oilcloth', 'table', 'tablecloth', 'surface'],
+        kind: 'checkered kitchen table cover',
+        desc: 'A cracked yellow-and-white checkered tablecloth patterned with brown tea rings and grease pencil tallies.',
+        reachVerbs: ['scrape', 'remember', 'pour'],
+        responses: {
+          scrape: 'You scrape at an old ring with your thumbnail. Under the grease, someone has penciled: "Milk bill paid 14th Oct — don\'t let him in."',
+          remember: 'You lay your palms flat on the oilcloth. The coolness of the table brings back the taste of barley sugar and the sound of rain on the zinc roof.',
+          pour: 'You pour a few drops of cold tea onto the vinyl. The dark liquid runs into the cracks, mapping miniature black rivers between the yellow squares.'
+        }
+      },
+      {
+        name: 'cutlery-drawer',
+        title: 'Cutlery Drawer',
+        aliases: ['drawer', 'cutlery', 'spoons', 'silver'],
+        kind: 'jammed deal kitchen drawer',
+        desc: 'A swollen pine drawer stuck half-open, rattling with lead teaspoons, bone-handled knives, and foil milk caps.',
+        reachVerbs: ['open', 'scrape', 'remember'],
+        responses: {
+          open: 'You give the drawer a sharp tug. It groans open another two inches, revealing a silver fish knife engraved with a monogram that belongs to no one in this family.',
+          scrape: 'You scrape black tarnish off a soup spoon. The bowl of the spoon mirrors the kitchen upside-down, but the window behind you shows water instead of the yard.',
+          remember: 'Rattling the spoons sounds like your grandmother laying the table on Sunday afternoons while the stew simmered.'
+        }
+      },
+      {
+        name: 'condensed-milk-tin',
+        title: 'Condensed Milk Tin',
+        aliases: ['tin', 'milk', 'can'],
+        kind: 'punctured blue-and-white tin',
+        desc: 'A blue tin with two rusty nail-holes punched in the top, slowly oozing thick, sugary yellow cream into the puddle.',
+        reachVerbs: ['pour', 'open', 'scrape'],
+        responses: {
+          pour: 'You tip the tin over your saucer. A rope of thick, caramel-sweet cream ribbons down, smelling of vanilla and nursery tea.',
+          open: 'You widen one of the nail-holes with a teaspoon handle; the tin burps sweet condensed vapor into the damp room.',
+          scrape: 'You scrape crystallized sugar from the rim; it crunches like fine beach sand between your teeth.'
+        }
+      },
+      {
+        name: 'drowned-carpet',
+        title: 'Drowned Carpet',
+        aliases: ['carpet', 'rug', 'floor', 'puddle'],
+        kind: 'waterlogged Axminster runner',
+        desc: 'A faded wool runner submerged beneath two inches of brackish water, harboring small pale minnows among its fringes.',
+        reachVerbs: ['remember', 'pour', 'scrape'],
+        responses: {
+          remember: 'Staring into the murky water, you see the floral pattern beneath: red cabbage roses floating under the surface like drowned bouquets.',
+          pour: 'You splash a mug of water across the surface; the ripple makes the submerged wool tassels sway like pond weed.',
+          scrape: 'You drag your heel across the pile; mud rises in brown clouds, smelling of canal dredgings.'
+        }
+      },
+      {
+        name: 'steeped-pot',
+        title: 'Steeped Pot',
+        aliases: ['pot', 'teapot', 'tea', 'brown-betty'],
+        kind: 'brown Betty glazed teapot',
+        desc: 'A heavy brown ceramic teapot that never runs empty, though the tea it pours tastes slightly of peppermint and rain.',
+        reachVerbs: ['pour', 'open', 'remember'],
+        responses: {
+          pour: 'You lift the steaming pot and pour. A dark amber stream splashes into the cup, curling into fragrant white steam that touches the ceiling.',
+          open: 'You lift the ceramic lid. Inside, the black tea leaves have arranged themselves into the distinct shape of an open hand.',
+          remember: 'The warmth of the clay against your fingers feels like someone holding your wrists on a freezing morning.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[TRANSISTOR MEMORY LOG // MARSH LANE // 1974]`,
+      `${keeper.prefix.toUpperCase()}: "Mind the puddle around the legs of the table. The water came up through the floorboards while you were sleeping."`,
+      `${keeper.prefix.toUpperCase()}: "The ${entities[0].title} has been running all morning; they're reading the racing results from Kempton Park, but that track shut before the war."`,
+      `${keeper.prefix.toUpperCase()}: "Don't go opening the pantry door, whatever you do. Mother's in there sorting the jars, and she doesn't like the light."`,
+      `[WATER SOUND: a gentle lap-lap against the skirting board; radio valves humming softly]`
+    ]
+  },
+  {
+    id: 'orbital_solarium',
+    nameTemplates: [
+      (p) => `SOLARIUM-XII // SEVENTH APOGEE`,
+      (p) => `THE WILTING GREENHOUSE OF EMPEROR ${p.choice(['CYRUS', 'AUREL', 'VALENS', 'SEVERUS'])}`,
+      (p) => `ORBITAL BOTANICA // PRISM TRAY ${p.int(3, 19)}`,
+      (p) => `THE JASMINE DOME TELEMETRY // ORBIT ${p.int(100, 999)}`,
+      (p) => `LAGRANGE RETORT // FLORA VACUUM`
+    ],
+    themes: [
+      'microgravity glass observatory filled with untrimmed night-blooming jasmine; the star outside is swelling purple',
+      'a brass solarium drifting in Lagrange point 5, where dead courtiers are composted in orchid moss',
+      'the imperial glass conservatory in high orbit; zero-gravity water globules hover among wilting camellias',
+      'a hydroponic void-station where royal decrees are read to dying ferns through silver speaking tubes'
+    ],
+    palettes: [
+      ['#0a0c0e', '#18231c', '#d4af37', '#f4e8c1', '#2d6a4f'],
+      ['#0b131f', '#1b263b', '#778da9', '#e0e1dd', '#c08552'],
+      ['#0e1111', '#1f2421', '#99e2b4', '#d8f3dc', '#679436']
+    ],
+    keepers: [
+      {
+        name: 'Gardener-Vizier Seth',
+        personality: 'wears emerald silk blindfolds to save his sight for the eclipse; whispers reprimands to drooping white camellias',
+        idiom: 'solar filters, capillary sap, pruning shears, nectar ampoules, and court titles',
+        prefix: 'Vizier Seth',
+        unknownResponses: [
+          (cmd) => `Vizier Seth snips the air with silver shears: "'${cmd}' is not in the botanical court decree. Inquire of the almanac, or prune, angle, inhale, water, or graft."`,
+          (cmd) => `Vizier Seth shakes his emerald silk veil: "'${cmd}' has cast a shadow on the imperial buds. Speak in horticultural terms."`
+        ]
+      },
+      {
+        name: 'Hydroponic Maiden Lyra',
+        personality: 'hair floats in zero gravity like black river grass; speaks in sap circulation rates and vacuum seal leakages',
+        idiom: 'osmotic pressure, prism refraction, star-burn, and wilting symptoms',
+        prefix: 'Lyra',
+        unknownResponses: [
+          (cmd) => `Lyra floats back an inch: "'${cmd}' disrupts the nutrient mist. Consult the almanac, or prune, angle, inhale, water, or graft."`,
+          (cmd) => `Lyra tests the leaf pH with a slip of paper: "'${cmd}' carries no valence in this dome."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'Green leaves must never be turned toward the blind side of the dead star.',
+      'Sunlight reflected through three quartz prisms produces frost instead of warmth.',
+      'The Vizier is forbidden to prune any vine that has cast its shadow upon the throne.',
+      'Flowers blooming in vacuum emit no fragrance, only shortwave static.',
+      'Sap circulating in zero gravity moves counter-clockwise on imperial birthdays.',
+      'Any fruit harvested while the star is eclipsed turns to bitter lead-shot.'
+    ],
+    helpVerb: 'almanac',
+    reseedVerb: 'eclipse',
+    verbsPool: [
+      { name: 'prune', help: 'prune [vine/leaf] — cut back wild overgrowth or dead leaves with silver shears.' },
+      { name: 'angle', help: 'angle [prism/mirror] — turn quartz prisms or brass louvers toward the swelling purple sun.' },
+      { name: 'inhale', help: 'inhale [target] — sample the scented vapor, spores, or ozone hovering around an entity.' },
+      { name: 'water', help: 'water [roots/tray] — release nutrient mist or guide floating water spheres into root fibers.' },
+      { name: 'graft', help: 'graft [stem/bulb] — splice two living tissues together with waxed silk thread.' },
+      { name: 'almanac', help: 'almanac — consult the imperial celestial calendar and gardening directives.' },
+      { name: 'eclipse', help: 'eclipse — close the outer brass shutters and reboot the station in cold darkness.' }
+    ],
+    entitiesPool: [
+      {
+        name: 'jasmine-trellis',
+        title: 'Jasmine Trellis',
+        aliases: ['jasmine', 'trellis', 'vine', 'blossoms'],
+        kind: 'floating brass plant lattice',
+        desc: 'A tangled brass lattice covered in fragrant star-shaped white blossoms that drift weightlessly from their stems.',
+        reachVerbs: ['prune', 'inhale', 'water', 'graft'],
+        responses: {
+          prune: 'You snip a withered tendril with your shears. A drop of clear, fragrant sap wells up and floats away like a miniature glass bead.',
+          inhale: 'The fragrance is overwhelming—heavy jasmine laced with ozone and the faint metallic tang of unfiltered solar radiation.',
+          water: 'You guide a floating globe of water into the moss mat; the roots drink greedily, turning bright emerald in seconds.',
+          graft: 'You bind a sliver of dark plum-vine into the wood; the seam pulses with pale green light.'
+        }
+      },
+      {
+        name: 'amethyst-prism',
+        title: 'Amethyst Prism',
+        aliases: ['prism', 'amethyst', 'crystal', 'lens'],
+        kind: 'faceted orbital quartz optic',
+        desc: 'A hand-cut hexagonal amethyst crystal splitting the dying purple star\'s rays into three violet bands across the floor.',
+        reachVerbs: ['angle', 'inhale', 'prune'],
+        responses: {
+          angle: 'You pivot the brass gimbals. The violet beam shifts across the moss bed; where the light touches, small nocturnal buds snap open with audible pops.',
+          inhale: 'Near the warm crystal face, the air smells of heated glass and scorched sugar.',
+          prune: 'You wipe away a film of dried condensation; the refracted beam sharpens into razor-edged violet geometry.'
+        }
+      },
+      {
+        name: 'water-droplet',
+        title: 'Water Droplet',
+        aliases: ['droplet', 'water', 'sphere', 'globule'],
+        kind: 'floating microgravity water sphere',
+        desc: 'A six-inch sphere of jasmine-scented water hovering above the console, reflecting the entire dome in curved miniature.',
+        reachVerbs: ['inhale', 'water', 'angle'],
+        responses: {
+          inhale: 'You lean your face toward the sphere. As your breath ripples its skin, a faint sweet scent of mint and wet stone fills your nose.',
+          water: 'You gently push the sphere toward the root-box; it impacts the peat with a soft plop and is drawn into the soil by capillary greed.',
+          angle: 'Through the floating sphere, the purple star looks like an inverted violet droplet hanging in an obsidian well.'
+        }
+      },
+      {
+        name: 'compost-retort',
+        title: 'Compost Retort',
+        aliases: ['retort', 'compost', 'vessel', 'urn'],
+        kind: 'bronze imperial decomposition vessel',
+        desc: 'A steaming sealed bronze vessel digesting the remains of the imperial library and dried camellia leaves into black humus.',
+        reachVerbs: ['inhale', 'water', 'prune'],
+        responses: {
+          inhale: 'You open the sampling valve. The vapor smells of rich autumnal forest earth, decaying calfskin bindings, and dried cloves.',
+          water: 'You inject half a litre of saline into the intake; the bronze vessel rumbles with biological contentment.',
+          prune: 'You scrape charred carbon crust off the relief carvings; underneath, a bronze bas-relief shows the coronation of a seven-eyed child.'
+        }
+      },
+      {
+        name: 'mercury-manometer',
+        title: 'Mercury Manometer',
+        aliases: ['manometer', 'gauge', 'pressure', 'tube'],
+        kind: 'curved glass vacuum pressure indicator',
+        desc: 'A U-shaped glass tube filled with quicksilver measuring the root-bed pressure against the vacuum of space.',
+        reachVerbs: ['angle', 'inhale', 'prune'],
+        responses: {
+          angle: 'Tapping the glass makes the silvery meniscus bounce; the vacuum seal holds at four atmospheres, precisely.',
+          inhale: 'The glass column is icy cold; no gas leaks past the lead-soldered flanges.',
+          prune: 'You clear away climbing moss that was attempting to wrap itself around the measurement scale.'
+        }
+      },
+      {
+        name: 'imperial-graft',
+        title: 'Imperial Graft',
+        aliases: ['graft', 'rose', 'orchid', 'hybrid'],
+        kind: 'spliced botanical curiosity',
+        desc: 'A white damask rose stem surgically spliced into an obsidian orchid bulb, sweating droplets of dark crimson nectar.',
+        reachVerbs: ['graft', 'inhale', 'prune', 'water'],
+        responses: {
+          graft: 'You tighten the silk binding around the join. The plant shivers; two pale thorns lengthen by half an inch.',
+          inhale: 'The crimson nectar smells of myrrh and iron—rich, sickeningly sweet, and dangerous.',
+          prune: 'You clip away an infected petal; the severed tissue curls into ash before it drifts three inches.',
+          water: 'Misting the graft causes the obsidian bulb to flex like a waking toad.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[SOLARIUM LOG // APOGEE ORBIT ${p.int(100, 999)} // STAR STATUS: PURPLE DWARF]`,
+      `${keeper.prefix.toUpperCase()}: "Keep your boots clamped to the magnetic rail. If you float into the rose trellis, the thorns will unlace your pressure suit."`,
+      `${keeper.prefix.toUpperCase()}: "The ${entities[0].title} is blooming out of turn again; the dying star is exciting the root-beds."`,
+      `${keeper.prefix.toUpperCase()}: "His Imperial Majesty has been composted in the retort these twenty years, but his jasmine still expects water at noon."`,
+      `[ATMOSPHERIC SOUND: the gentle hiss of microgravity air scrubbers and floating leaves brushing against glass]`
+    ]
+  },
+  {
+    id: 'glacial_scriptorium',
+    nameTemplates: [
+      (p) => `LEDGER-ROOM 81 // BLUE-ICE VAULT`,
+      (p) => `SUB-ARCTIC CHANCERY OF REJECTED PETITIONS`,
+      (p) => `THE PERMAFROST PIGEONHOLE ARCHIVE // SECTION ${p.choice(['IV', 'VII', 'X'])}`,
+      (p) => `COLD-OFFICE K-${p.int(1, 19)} // SEALED FOLIOS`,
+      (p) => `THE ICE-BORE REGISTRY // DOCKET ${p.int(100, 999)}`
+    ],
+    themes: [
+      'a clerk\'s cubicle chiseled three hundred feet into glacial blue ice; carbon paper freezes before the ink dries',
+      'an underground administrative vault beneath the ice cap where grievances are weighed against tallow rations',
+      'the archive of an unrecorded empire preserved in permafrost; petitions are indexed by their frost-crystal structure',
+      'a subterranean chancery where clerks wear three pairs of sheepskin mittens and write with heated bronze needles'
+    ],
+    palettes: [
+      ['#0c1015', '#16202a', '#8da9c4', '#eef4f8', '#9e2a2b'],
+      ['#090d12', '#141e28', '#64dfdf', '#caf0f8', '#48cae4'],
+      ['#0b131a', '#1c2d37', '#a8dadc', '#f1faee', '#e63946']
+    ],
+    keepers: [
+      {
+        name: 'Deputy Clerk Aris',
+        personality: 'wears three pairs of fingerless mittens; breathes onto his steel pen-nib every four words; hates sudden movement',
+        idiom: 'docket numbers, wax seals, carbon paper smudges, blue ice faults, and tallow rations',
+        prefix: 'Clerk Aris',
+        unknownResponses: [
+          (cmd) => `Clerk Aris dips his frozen nib into sludge: "'${cmd}' is not an authorized chancery action. Consult the index, or thaw, file, audit, scratch, or stamp."`,
+          (cmd) => `Clerk Aris taps a cold ruler: "Command '${cmd}' lacks an official revenue stamp. Stick to vault protocols."`
+        ]
+      },
+      {
+        name: 'Registrar Ksenia',
+        personality: 'perched atop a tall walnut ladder; drops lead balance weights onto dockets to verify if their legal weight holds',
+        idiom: 'chancery dockets, ice creep, gall ink, and rejected petitions',
+        prefix: 'Registrar Ksenia',
+        unknownResponses: [
+          (cmd) => `Ksenia adjusts her fur cowl: "'${cmd}' is missing from the imperial index. Try index, or thaw, file, audit, scratch, or stamp."`,
+          (cmd) => `Ksenia frowns from her ladder: "'${cmd}' will not satisfy the ice auditors."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'Entries recorded in red ink freeze at a higher temperature than black ink.',
+      'Any petition touched without mittens must be recopied from memory before sunset.',
+      'No clerk may speak aloud the name of a town that has fewer than three chimneys.',
+      'The glacial walls move two inches inward during every official audit.',
+      'Carbon paper used three times begins to record thoughts the clerk omitted.',
+      'A seal broken without witnesses remains legally intact until thawed.'
+    ],
+    helpVerb: 'index',
+    reseedVerb: 'blizzard',
+    verbsPool: [
+      { name: 'thaw', help: 'thaw [ledger/inkwell] — warm frozen parchment or ink over the charcoal embers to reveal text.' },
+      { name: 'file', help: 'file [docket/paper] — lodge a record into the cold iron pigeonholes.' },
+      { name: 'audit', help: 'audit [target] — examine signatures, wax seals, or calculations for fraudulent discrepancies.' },
+      { name: 'scratch', help: 'scratch [vellum/ice] — write with cold steel nib or etch markings into the frozen wall.' },
+      { name: 'stamp', help: 'stamp [folio/docket] — apply the heavy brass chancery seal to an entity.' },
+      { name: 'index', help: 'index — consult the chancery filing catalog and clerk regulations.' },
+      { name: 'blizzard', help: 'blizzard — open the surface vents and let the blue drift bury the archive (reboot).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'frozen-ledger-1891',
+        title: 'Frozen Ledger 1891',
+        aliases: ['ledger', 'book', 'folio', '1891'],
+        kind: 'vellum folio welded shut by blue ice',
+        desc: 'A massive calfskin registry whose pages are frozen solid into a brick of blue ice; its edges have been shaved with a drawknife.',
+        reachVerbs: ['thaw', 'audit', 'scratch', 'stamp'],
+        responses: {
+          thaw: 'You hold the ledger over the embers. The ice turns transparent, revealing cramped iron-gall writing: "Item: 400 versts of uninhabited marsh ceded to the glacier in exchange for quiet."',
+          audit: 'You inspect the shaved margins. Every column has been balanced down to the last tallow wick, but the sums do not account for the year 1888.',
+          scratch: 'You etch your initials into the frosty vellum; the ice crystals bloom around the steel tip like white lichen.',
+          stamp: 'You bring the heavy brass seal down on the frozen cover; it leaves a crisp, frosted relief of the double-headed seal.'
+        }
+      },
+      {
+        name: 'charcoal-brazier',
+        title: 'Charcoal Brazier',
+        aliases: ['brazier', 'embers', 'fire', 'pot'],
+        kind: 'cast-iron heating pot',
+        desc: 'A shallow iron bowl holding three embers of birch coal that shed no warmth further than six inches, only pale gray ash.',
+        reachVerbs: ['thaw', 'audit', 'scratch'],
+        responses: {
+          thaw: 'You blow upon the gray embers. A dull red glow wakes in the coal; a thin streamer of fragrant birch smoke curls toward the ice ceiling.',
+          audit: 'The coals have burned for three days without shrinking. The fuel is not birch; it is petrified bone.',
+          scratch: 'You stir the ash with your pen-handle; among the coals rests a melted brass seal ring.'
+        }
+      },
+      {
+        name: 'lead-pigeonhole',
+        title: 'Lead Pigeonhole',
+        aliases: ['pigeonhole', 'cubby', 'files', 'shelf'],
+        kind: 'honeycomb sheet-lead document shelf',
+        desc: 'A wall of miniature square compartments stuffed with curled petitions tied with black wool ribbon, smelling of cellar damp.',
+        reachVerbs: ['file', 'audit', 'thaw'],
+        responses: {
+          file: 'You tuck a rolled document into cubby 44. The lead walls groan softly as the glacier behind the shelf settles.',
+          audit: 'You pull a docket from cubby 12: "Petition of the Widow S. regarding the disappearance of the sun over Lake Ladoga — DISMISSED AS FRIVOLOUS."',
+          thaw: 'Warming the compartment releases the sharp, vinegar smell of ancient ink.'
+        }
+      },
+      {
+        name: 'gall-inkwell',
+        title: 'Gall Inkwell',
+        aliases: ['inkwell', 'ink', 'gall', 'well'],
+        kind: 'soapstone oak-gall ink reservoir',
+        desc: 'A heavy carved soapstone pot of purple-black ink, capped with a crust of delicate hexagonal ice needles.',
+        reachVerbs: ['thaw', 'scratch', 'audit'],
+        responses: {
+          thaw: 'Holding your thumb over the stone well melts the crust. The liquid beneath is glossy black and smells of iron filings and crushed acorns.',
+          scratch: 'You dip your steel nib through the ice crust; it emerges loaded with viscous black fluid that writes with clinical sharpness.',
+          audit: 'The ink level in the well has not dropped, despite four thousand pages of audit transcripts.'
+        }
+      },
+      {
+        name: 'parchment-press',
+        title: 'Parchment Press',
+        aliases: ['press', 'screw', 'clamp'],
+        kind: 'cast-iron screw flatten press',
+        desc: 'A tabletop screw press holding flat a water-stained map of an empire whose borders melted seventy years ago.',
+        reachVerbs: ['audit', 'thaw', 'scratch', 'stamp'],
+        responses: {
+          audit: 'You examine the coastline on the map. Every port town is marked with a tiny red wax dot, indicating abandoned quarantine.',
+          thaw: 'Warming the iron screw allows you to loosen the wheel two turns; the parchment beneath expands with a dry sigh.',
+          scratch: 'You trace the forgotten frontier with your nail; the vellum is brittle as dried horn.',
+          stamp: 'You clamp the seal block down with the screw; the paper takes the impression with a satisfying crunch.'
+        }
+      },
+      {
+        name: 'brass-clerks-bell',
+        title: 'Brass Clerk’s Bell',
+        aliases: ['bell', 'counter-bell', 'chime'],
+        kind: 'tarnished service counter bell',
+        desc: 'A counter bell whose interior dome is stuffed with raw sheep wool so that ringing it will not trigger ice faults in the vault.',
+        reachVerbs: ['audit', 'thaw', 'scratch'],
+        responses: {
+          audit: 'You inspect the underside. The wool muffling the clapper is stiff with grease and dried wax.',
+          thaw: 'You hold the bell over the embers until the brass warms; the metal emits a high, faint singing tone like a mosquito.',
+          scratch: 'You scratch the base with your knife; the number 14 is stamped next to the inspector\'s hallmark.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[COLD-ARCHIVE TRANSCRIPT // SECTION 14-B // TEMPERATURE: -8° C]`,
+      `${keeper.prefix.toUpperCase()}: "Keep your voice low. The ice above us has three stress fractures that ring when someone clears their throat."`,
+      `${keeper.prefix.toUpperCase()}: "The ${entities[0].title} has been requisitioned by the High Chancery; do not attempt to crack the ice until the audit opens."`,
+      `${keeper.prefix.toUpperCase()}: "If you have come to petition for coal, turn back. The coal barges were frozen in the gulf before you were born."`,
+      `[ICE SOUND: a sharp, distant crack reverberates through the blue glacial walls]`
+    ]
+  },
+  {
+    id: 'chime_foundry',
+    nameTemplates: [
+      (p) => `THE RESONATOR PIT // ELEVENTH TUNING`,
+      (p) => `BRONZE-WELL OF THE FOUNDRY MASTERS // VAULT ${p.choice(['ALPHA', 'OMEGA', 'VII'])}`,
+      (p) => `ACOUSTIC DAMPENING CHAMBER C-${p.int(1, 16)}`,
+      (p) => `THE CHIME-CISTERN AT DEEP QUARRY`,
+      (p) => `HARMONIC FORGE ${p.int(10, 88)} // SECTOR BELL`
+    ],
+    themes: [
+      'a dry subterranean foundry pit hung with twenty-ton inverted bronze bowls; sound travels three seconds too slow',
+      'a cavern workshop where monks tune church bells by chipping away cooled bronze with diamond-tipped chisels',
+      'an acoustic cistern where long-dead foundry masters catalogued harmonics that cause tooth decay',
+      'an underground bell-tuning gallery where silence is measured with mercury balances and lead weights'
+    ],
+    palettes: [
+      ['#121110', '#241e1b', '#c97a3e', '#f2e2ba', '#52796f'],
+      ['#0f0e11', '#1d1924', '#b08968', '#ede0d4', '#7f5539'],
+      ['#14120e', '#2b2118', '#dd6e42', '#e8dab2', '#4f6d7a']
+    ],
+    keepers: [
+      {
+        name: 'Tuning Master Orlo',
+        personality: 'deaf in the left ear; strikes tuning forks against his own teeth to verify pitch; speaks strictly in overtone intervals',
+        idiom: 'bell-metal proportions, verdigris crust, strike notes, acoustic dampening, and hum frequencies',
+        prefix: 'Master Orlo',
+        unknownResponses: [
+          (cmd) => `Master Orlo strikes a fork on his incisor: "'${cmd}' is a flat discord. Consult the chimes, or strike, tune, dampen, listen, or sand."`,
+          (cmd) => `Master Orlo cups his right ear: "That word '${cmd}' has no strike note in this pit."`
+        ]
+      },
+      {
+        name: 'Bell-Founder Vane',
+        personality: 'face pitted from flying droplets of bronze; wears a heavy lead apron; judges visitors by their chest resonance',
+        idiom: 'casting sand, tin percentages, clapper swing, and cooling cracks',
+        prefix: 'Founder Vane',
+        unknownResponses: [
+          (cmd) => `Founder Vane leans on his lead mallet: "'${cmd}' won't pour or ring. Stick to the chimes catalog, or strike, tune, dampen, listen, or sand."`,
+          (cmd) => `Founder Vane spits into the casting sand: "'${cmd}' is hollow metal."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'The fifth harmonic only resonates while someone in the chamber is withholding a secret.',
+      'Bells poured during a waning moon must never be struck with an iron hammer.',
+      'Sound traveling south across the foundry pit loses two vibrations per yard.',
+      'A bell that rings in a total vacuum will crack upon returning to atmospheric pressure.',
+      'Silence is counted as an octave by the foundry masters.',
+      'Any bell whose hum note outlasts the candle must be buried in casting sand.'
+    ],
+    helpVerb: 'chimes',
+    reseedVerb: 'shatter',
+    verbsPool: [
+      { name: 'strike', help: 'strike [bell/fork] — swing mallet or tap knuckles against bronze or stone to test resonance.' },
+      { name: 'tune', help: 'tune [chime/metal] — shave microtones from the inner rim using the diamond chisel.' },
+      { name: 'dampen', help: 'dampen [target] — apply thick boiled felt to silence wild or dangerous overtones.' },
+      { name: 'listen', help: 'listen [target] — close eyes and track the decaying acoustic tail in the chamber.' },
+      { name: 'sand', help: 'sand [bronze/sand] — sift cooling sand or polish verdigris from a bell surface.' },
+      { name: 'chimes', help: 'chimes — list the foundry\'s harmonic registers and acoustic verbs.' },
+      { name: 'shatter', help: 'shatter — strike the fatal dissonant chord and collapse the chamber (reboot world).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'master-chime-alpha',
+        title: 'Master Chime Alpha',
+        aliases: ['chime', 'bell', 'alpha', 'bowl'],
+        kind: 'twelve-ton inverted bronze bowl',
+        desc: 'An enormous bronze bell suspended from charred oak beams; it rings with a low hum whenever a horse passes on the road eighty feet above.',
+        reachVerbs: ['strike', 'tune', 'dampen', 'listen', 'sand'],
+        responses: {
+          strike: 'You strike the rim with the lead-headed mallet. A sound like an iron sea breaking against cliffs rolls through the chamber; your ribs ache with the low C-sharp for two minutes.',
+          tune: 'You touch the chisel to the inner waist. A bright curl of bronze shavings falls into the dust; the hum note rises by a quarter-tone.',
+          dampen: 'You press the rabbit-felt pad against the rim. The vibration stops with a groan like a ship grounding in sand.',
+          listen: 'You lean your temple near the cold bronze. Inside the curve, the bell is humming the harmonic of a choir fifty years dead.',
+          sand: 'You buff the verdigris with emery cloth; golden bell metal emerges, glowing in the torchlight.'
+        }
+      },
+      {
+        name: 'cooling-sand-trough',
+        title: 'Cooling Sand Trough',
+        aliases: ['sand', 'trough', 'pit', 'molds'],
+        kind: 'black silicate casting bed',
+        desc: 'A wide trench of fine black casting sand still radiating dry heat from yesterday\'s pour, smelling of burned loam.',
+        reachVerbs: ['sand', 'listen', 'strike'],
+        responses: {
+          sand: 'You run your fingers through the black sand. It is hot as fresh bread, yielding smoothly like silk flour.',
+          listen: 'Leaning over the trough, you hear tiny cracks—the cooling bell deep in the sand contracting millimeter by millimeter.',
+          strike: 'You thrust the mallet handle into the sand; a buried copper core rings with a muffled, sweet ping.'
+        }
+      },
+      {
+        name: 'obsidian-fork',
+        title: 'Obsidian Fork',
+        aliases: ['fork', 'obsidian', 'tuning-fork'],
+        kind: 'volcanic glass pitch standard',
+        desc: 'A pitch-tuning fork carved of jet-black volcanic glass; it makes no sound in air, but sings when dipped in water.',
+        reachVerbs: ['strike', 'listen', 'tune', 'dampen'],
+        responses: {
+          strike: 'You tap the obsidian tines on your boot heel. In the air it is totally silent, but your skull rings with a sharp, cold octave.',
+          listen: 'You dip the fork into a tin cup of water. The surface erupts into thousands of ultrasonic droplets dancing in a mandala.',
+          tune: 'The glassy tines are cut with absolute perfection; not even a jeweler\'s file could take a micron from them.',
+          dampen: 'You grip the tines with your bare palm; the silent ringing in your molars ceases instantly.'
+        }
+      },
+      {
+        name: 'tuning-chisel',
+        title: 'Tuning Chisel',
+        aliases: ['chisel', 'tool', 'blade'],
+        kind: 'diamond-faced alloy scraper',
+        desc: 'A heavy tool-steel scraper tipped with industrial black diamond, used to shave microtones from cast bronze rims.',
+        reachVerbs: ['strike', 'tune', 'sand'],
+        responses: {
+          strike: 'The tool rings with a high, clear whistle when rapped against stone.',
+          tune: 'The diamond edge bites cleanly into bell metal, throwing off spirals of bright copper hair.',
+          sand: 'You wipe tallow and bronze dust from the shank with a leather scrap.'
+        }
+      },
+      {
+        name: 'chalk-register',
+        title: 'Chalk Register',
+        aliases: ['register', 'chalk', 'slate', 'board'],
+        kind: 'slate tablet of harmonic waveforms',
+        desc: 'A slab of gray Welsh slate covered in chalk sine-waves and frequency ratios of bells that cracked during the plague year.',
+        reachVerbs: ['sand', 'listen', 'tune'],
+        responses: {
+          sand: 'You smudge away an erroneous vibration ratio with your sleeve; chalk dust smells of quarry rain.',
+          listen: 'Reading the wave-forms makes your inner ear simulate the terrible dissonances cataloged there.',
+          tune: 'You chalk in a new frequency: 108.4 Hz — the resonance of empty vaults.'
+        }
+      },
+      {
+        name: 'felt-damper',
+        title: 'Felt Damper',
+        aliases: ['damper', 'felt', 'pad', 'muffler'],
+        kind: 'boiled rabbit-fur acoustic suppressor',
+        desc: 'A thick pad of boiled rabbit fur mounted on an ash pole, used to choke wild overtones before they crack the stone vault.',
+        reachVerbs: ['dampen', 'strike', 'sand'],
+        responses: {
+          dampen: 'You rest the soft fur against the vibrating floorboards; the room immediately grows eerily still.',
+          strike: 'Striking the felt produces only a soft puff of chalk dust and dry silence.',
+          sand: 'You shake the damper; bronze filings rain out onto the flagstones like glitter.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[FOUNDRY PIT TELEMETRY // TUNING REGISTER ${p.int(10, 99)}]`,
+      `${keeper.prefix.toUpperCase()}: "Cover your ears when you walk past the pit. The ${entities[0].title} is cooling, and when the core splits it sounds like a cannon."`,
+      `${keeper.prefix.toUpperCase()}: "Every bell cast here is tuned to a human voice that ceased talking before the casting commenced."`,
+      `${keeper.prefix.toUpperCase()}: "Do not strike the metal with iron. We use lead, bone, or the heel of the hand."`,
+      `[ACOUSTIC RESONANCE: a deep, slow hum vibrates through your collarbones and knees]`
+    ]
+  }
+];
+
+function generateWorld(seedInput) {
+  const prng = new PRNG(seedInput);
+  const archetype = prng.choice(ARCHETYPES);
+
+  const name = archetype.nameTemplates[prng.int(0, archetype.nameTemplates.length - 1)](prng);
+  const theme = prng.choice(archetypes(archetype.id).themes || archetype.themes);
+  const palette = prng.choice(archetype.palettes);
+  const keeperTemplate = prng.choice(archetype.keepers);
+
+  // Entities: select 4-8 entities from the pool
+  const entityCount = Math.min(archetype.entitiesPool.length, prng.int(4, Math.min(6, archetype.entitiesPool.length)));
+  const selectedEntities = prng.sample(archetype.entitiesPool, entityCount);
+
+  // Laws: select 2-4 laws from the pool
+  const lawCount = prng.int(2, Math.min(4, archetype.lawsPool.length));
+  const selectedLaws = prng.sample(archetype.lawsPool, lawCount);
+
+  // Verbs: select 5-8 verbs
+  // Ensure helpVerb and reseedVerb are included!
+  const allVerbs = archetype.verbsPool.slice();
+  const helpVerbObj = allVerbs.find(v => v.name === archetype.helpVerb);
+  const reseedVerbObj = allVerbs.find(v => v.name === archetype.reseedVerb);
+  const otherVerbs = allVerbs.filter(v => v.name !== archetype.helpVerb && v.name !== archetype.reseedVerb);
+
+  const targetVerbCount = prng.int(5, Math.min(8, allVerbs.length));
+  const selectedOthers = prng.sample(otherVerbs, Math.max(3, targetVerbCount - 2));
+
+  const verbs = [helpVerbObj, ...selectedOthers, reseedVerbObj].filter(Boolean);
+
+  // Script
+  const script = archetype.scriptGenerator(keeperTemplate, selectedEntities, prng);
+
+  const keeper = {
+    name: keeperTemplate.name,
+    personality: keeperTemplate.personality,
+    idiom: keeperTemplate.idiom,
+    prefix: keeperTemplate.prefix
+  };
+
+  return {
+    name,
+    theme,
+    palette,
+    keeper,
+    entities: selectedEntities,
+    laws: selectedLaws,
+    verbs,
+    script,
+    seed: prng.hexSeed,
+    archetypeId: archetype.id,
+    helpVerb: archetype.helpVerb,
+    reseedVerb: archetype.reseedVerb,
+    unknownResponseGenerators: keeperTemplate.unknownResponses
+  };
+}
+
+function archetypes(id) {
+  return ARCHETYPES.find(a => a.id === id) || ARCHETYPES[0];
+}
+
+module.exports = {
+  ARCHETYPES,
+  generateWorld
+};
