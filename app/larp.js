@@ -22,23 +22,12 @@ function serializeToLarp(world) {
     concept: world.concept || 'random',
     interface: world.interface || 'device',
     palette: world.palette,
-    keeper: world.keeper,
     seed: world.seed,
     openVerb: world.openVerb || 'open',
     homeVerb: world.homeVerb || 'home',
     helpVerb: world.helpVerb || 'help',
     reseedVerb: world.reseedVerb || 'reseed'
   }));
-
-  // 2. laws
-  if (Array.isArray(world.laws)) {
-    for (const law of world.laws) {
-      lines.push(JSON.stringify({
-        section: 'law',
-        rule: typeof law === 'string' ? law : (law.rule || JSON.stringify(law))
-      }));
-    }
-  }
 
   // 3. scene
   if (Array.isArray(world.script)) {
@@ -154,24 +143,6 @@ function normalizeInterpretedWorld(obj, originalContent = '') {
     palette = obj.palette.slice(0, 5).map(c => String(c).trim());
   }
 
-  // Keeper
-  const kObj = (obj.keeper && typeof obj.keeper === 'object') ? obj.keeper : {};
-  const keeper = {
-    name: typeof kObj.name === 'string' && kObj.name.trim() ? kObj.name.trim() : 'The Sector Proctor',
-    personality: typeof kObj.personality === 'string' ? kObj.personality.trim() : 'observant and austere',
-    idiom: typeof kObj.idiom === 'string' ? kObj.idiom.trim() : 'mechanical registers and physical telemetry',
-    prefix: typeof kObj.prefix === 'string' && kObj.prefix.trim() ? kObj.prefix.trim() : 'Proctor'
-  };
-
-  // Laws
-  let laws = [];
-  if (Array.isArray(obj.laws) && obj.laws.length > 0) {
-    laws = obj.laws.map(l => (typeof l === 'string' ? l.trim() : (l.rule || JSON.stringify(l)))).filter(Boolean);
-  }
-  if (laws.length === 0) {
-    laws.push('Nothing entered into the registry can be undone.', 'The screen dims whenever unobserved.');
-  }
-
   // Script
   let script = [];
   if (Array.isArray(obj.script) && obj.script.length > 0) {
@@ -180,7 +151,7 @@ function normalizeInterpretedWorld(obj, originalContent = '') {
   if (script.length === 0) {
     script.push(
       `[LARP SCRIPT MOUNTED // ${name}]`,
-      `${keeper.prefix}: "The sector has been reconstituted from document storage."`,
+      `[SYSTEM] Reconstituted from document storage.`,
       `[SYSTEM READY]`
     );
   }
@@ -284,7 +255,7 @@ function normalizeInterpretedWorld(obj, originalContent = '') {
   const reseedVerb = obj.reseedVerb || 'reseed';
 
   const verbs = [
-    { name: helpVerb, help: `${helpVerb} — consult the world verbs and operational laws.` },
+    { name: helpVerb, help: `${helpVerb} — consult system guidance and commands.` },
     { name: openVerb, help: `${openVerb} [app] — open an apparatus running screen.` },
     { name: homeVerb, help: `${homeVerb} — step back to the system overview.` },
     { name: reseedVerb, help: `${reseedVerb} — dissolve reality and return to concept prompt.` }
@@ -306,9 +277,7 @@ function normalizeInterpretedWorld(obj, originalContent = '') {
     concept,
     interface: iface,
     palette,
-    keeper,
     entities,
-    laws,
     bin: binCommands,
     script,
     verbs,
@@ -328,22 +297,6 @@ function parseLooseText(content) {
   const sentences = text.split(/[.\n]+/).map(s => s.trim()).filter(Boolean);
   const firstLine = sentences[0] || 'Unknown Domain';
   const name = firstLine.slice(0, 36).replace(/^(the|a|an|in|at)\s+/i, '').trim().toUpperCase() || 'UNBOUND REALITY';
-
-  // Extract potential laws
-  const laws = [];
-  const lawRegex = /(?:law|rule|decree)\s*\d*[:\s-]+([^.\n]+)/gi;
-  let match;
-  while ((match = lawRegex.exec(text)) !== null) {
-    if (match[1] && match[1].trim()) laws.push(match[1].trim());
-  }
-  for (const s of sentences) {
-    if (/\b(never|must not|forbidden|always|shall not)\b/i.test(s) && !laws.includes(s)) {
-      laws.push(s);
-    }
-  }
-  if (laws.length === 0) {
-    laws.push('Nothing observed here remains stationary.', 'The frequency of silence dictates the pressure.');
-  }
 
   // Extract potential bin commands
   const binCommands = [];
@@ -423,17 +376,10 @@ function parseLooseText(content) {
     iface = 'gui';
   }
 
-  const keeper = {
-    name: 'The System Supervisor',
-    personality: 'attentive and technical',
-    idiom: 'system readings and operational parameters',
-    prefix: 'Supervisor'
-  };
-
   const script = sentences.slice(0, 5).map(s => `[LOG]: "${s}"`);
 
   const verbs = [
-    { name: 'help', help: 'help — consult the world verbs and operational guidelines.' },
+    { name: 'help', help: 'help — display system guidance and command syntax.' },
     { name: 'open', help: 'open [app] — open an application running screen.' },
     { name: 'home', help: 'home — return to the system overview.' },
     { name: 'reseed', help: 'reseed — reboot system and return to concept prompt.' }
@@ -451,13 +397,11 @@ function parseLooseText(content) {
     concept: 'hand-authored larp',
     interface: iface,
     palette: ['#0a192f', '#172a45', '#64ffda', '#ccd6f6', '#8892b0'],
-    keeper,
     seed: '0x' + Buffer.from(name).toString('hex').slice(0, 8),
     openVerb: 'open',
     homeVerb: 'home',
     helpVerb: 'help',
     reseedVerb: 'reseed',
-    laws,
     script,
     entities,
     bin: binCommands,
@@ -485,12 +429,6 @@ function parseLarpSync(content) {
     concept: 'random',
     interface: 'device',
     palette: ['#09131b', '#0f2537', '#4ecdc4', '#cbe3db', '#e07a5f'],
-    keeper: {
-      name: 'Document Interpreter',
-      personality: 'technical and direct',
-      idiom: 'document parser registers',
-      prefix: 'Parser'
-    },
     seed: '0x00000000',
     openVerb: 'open',
     homeVerb: 'home',
@@ -498,7 +436,6 @@ function parseLarpSync(content) {
     reseedVerb: 'reseed'
   };
 
-  const laws = [];
   const script = [];
   const entities = [];
   const binCommands = [];
@@ -519,7 +456,7 @@ function parseLarpSync(content) {
 
     if (!item || typeof item !== 'object') continue;
 
-    const section = item.section || (item.name && item.palette ? 'world' : (item.rule ? 'law' : (item.app ? 'app' : null)));
+    const section = item.section || (item.name && item.palette ? 'world' : (item.app ? 'app' : null));
 
     if (section === 'world') {
       worldMeta = {
@@ -529,16 +466,12 @@ function parseLarpSync(content) {
         concept: item.concept || worldMeta.concept,
         interface: item.interface || worldMeta.interface,
         palette: (Array.isArray(item.palette) && item.palette.length >= 3) ? item.palette : worldMeta.palette,
-        keeper: (item.keeper && typeof item.keeper === 'object') ? item.keeper : worldMeta.keeper,
         seed: item.seed || worldMeta.seed,
         openVerb: item.openVerb || worldMeta.openVerb,
         homeVerb: item.homeVerb || worldMeta.homeVerb,
         helpVerb: item.helpVerb || worldMeta.helpVerb,
         reseedVerb: item.reseedVerb || worldMeta.reseedVerb
       };
-    } else if (section === 'law') {
-      const ruleText = item.rule || item.text || item.law || 'The document refuses to be read twice.';
-      laws.push(ruleText);
     } else if (section === 'scene') {
       const lineText = item.line || item.text || item.monologue;
       if (lineText) script.push(lineText);
@@ -603,13 +536,10 @@ function parseLarpSync(content) {
     }
   }
 
-  if (laws.length === 0) {
-    laws.push('Nothing entered into the registry can be undone.', 'The screen dims whenever unobserved.');
-  }
   if (script.length === 0) {
     script.push(
       `[LARP SCRIPT MOUNTED // SEED: ${worldMeta.seed}]`,
-      `${worldMeta.keeper.prefix}: "The sector has been reconstituted from document storage."`,
+      `[SYSTEM] Reconstituted from document storage.`,
       `[SYSTEM READY]`
     );
   }
@@ -639,7 +569,7 @@ function parseLarpSync(content) {
   }
 
   const verbs = [
-    { name: worldMeta.helpVerb, help: `${worldMeta.helpVerb} — consult the world verbs and operational laws.` },
+    { name: worldMeta.helpVerb, help: `${worldMeta.helpVerb} — consult system guidance and commands.` },
     { name: worldMeta.openVerb, help: `${worldMeta.openVerb} [app] — open an apparatus running screen.` },
     { name: worldMeta.homeVerb, help: `${worldMeta.homeVerb} — step back to the system overview.` },
     { name: worldMeta.reseedVerb, help: `${worldMeta.reseedVerb} — dissolve reality and return to concept prompt.` }
@@ -653,7 +583,6 @@ function parseLarpSync(content) {
 
   return {
     ...worldMeta,
-    laws,
     script,
     entities,
     bin: binCommands,
@@ -687,7 +616,6 @@ async function parseLarp(content, options = {}) {
       'Reader-not-validator policy:',
       '- Read the document however it subjectively feels.',
       '- A section that reads like an app becomes an openable app with an interactive control (dial/valve/lever/toggle/aperture/button).',
-      '- A rule, warning, or operational constraint becomes a world law.',
       '- A command or tool becomes a local bin command.',
       '- Garbled, corrupted, or incoherent text is interpreted as in-world damage, glitched lore, or an uncanny artifact — NEVER a reject or error.',
       '- If something is missing, invent evocative details in the idiom of the world.',
@@ -700,13 +628,6 @@ async function parseLarp(content, options = {}) {
       '  "concept": "intent concept or short summary",',
       '  "interface": "gui | tui | device | scene",',
       '  "palette": ["#bg", "#surface", "#accent", "#fg", "#dim"],',
-      '  "keeper": {',
-      '    "name": "Keeper Name",',
-      '    "personality": "demeanor description",',
-      '    "idiom": "metaphor and speech style",',
-      '    "prefix": "Short Prefix"',
-      '  },',
-      '  "laws": ["Binding rule 1", "Binding rule 2"],',
       '  "entities": [',
       '    {',
       '      "name": "slug-name",',
@@ -738,7 +659,7 @@ async function parseLarp(content, options = {}) {
       '  ],',
       '  "script": ["opening monologue line 1", "line 2", "line 3"],',
       '  "verbs": [',
-      '    { "name": "help", "help": "help — consult the world verbs and operational laws." },',
+      '    { "name": "help", "help": "help — display system guidance and command syntax." },',
       '    { "name": "open", "help": "open [app] — open an apparatus running screen." },',
       '    { "name": "home", "help": "home — step back to the system overview." },',
       '    { "name": "reseed", "help": "reseed — dissolve reality and return to concept prompt." }',

@@ -15,8 +15,7 @@ The parser **is the interpreter**, not a regex or JSON-lines parser. The reader-
 3. **Subjective interpretation**:
    - A chunk of text that reads like an apparatus or machinery becomes an inhabited **app**.
    - A command-like line or tool description becomes a **bin** command.
-   - A rule, warning, or operational constraint becomes a world **law**.
-   - Garbled, corrupted, or incoherent text is interpreted as in-world damage, glitched lore, or an uncanny artifact — **never a parse error**.
+   - Garbled, corrupted, or incoherent text is interpreted as in-world damage, glitched logs, or an artifact — **never a parse error**.
 4. **Nothing is rejected**: The interpreter never aborts, rejects, or throws on invalid syntax. It makes sense of whatever text it is handed.
 
 ---
@@ -25,7 +24,7 @@ The parser **is the interpreter**, not a regex or JSON-lines parser. The reader-
 
 When the LarpOS engine boots and generates a world, it writes an initial `.larp` document to `<state_dir>/world-<seed>.larp`.
 
-The generator writes this boot file with a readable, structured shape (with sections for world metadata, laws, apps, bin commands, and monologue scenes) because the generator knows what an operating system needs to function. **However, that structure is a generator convenience, not a format contract.**
+The generator writes this boot file with a readable, structured shape (with sections for world metadata, apps, bin commands, and boot logs) because the generator knows what an operating system needs to function. **However, that structure is a generator convenience, not a format contract.**
 
 The engine reads this file through the AI interpreter as its **authoritative source of truth**.
 
@@ -33,10 +32,10 @@ The engine reads this file through the AI interpreter as its **authoritative sou
 
 ## Live Rewriting & Dynamic Mutation
 
-The LarpOS engine watches the active `.larp` file (`fs.watch` with mtime polling fallback). When the file is edited on disk — by a human editor, by the resident keeper, or by an external tool:
+The LarpOS engine watches the active `.larp` file (`fs.watch` with mtime polling fallback). When the file is edited on disk — by a human editor, by an administrator, or by an external tool:
 
 1. The file watcher detects the change.
 2. The AI interpreter reads the revised text and subjectively re-interprets it into the updated world spec.
 3. The running operating system changes shape live, without restarting the server or breaking kiosk state.
 
-In-world verbs (such as `rewrite law <text>` or `add bin <name> <behavior>`) also update the active `.larp` file directly, demonstrating a live self-rewriting operating system.
+In-world verbs (such as `add bin <name> <behavior>`) also update the active `.larp` file directly, demonstrating a live self-rewriting operating system.

@@ -129,18 +129,17 @@ function extractJSON(text) {
 function defaultCommandFallback(world, rawText) {
   const text = (rawText || '').trim();
   if (!text) {
-    return `${world.keeper.prefix}: "System ready. Enter an operational command or 'help' for instructions."`;
+    return `System: ready. Enter an operational command or 'help' for instructions.`;
   }
   const lower = text.toLowerCase();
   const isHelp = (lower === 'help' || lower === '?' || lower === (world.helpVerb || '').toLowerCase());
   if (isHelp) {
     const verbList = (world.verbs || []).map(v => `  - ${v.name.toUpperCase()}: ${v.help}`).join('\n');
-    const lawsList = (world.laws || []).map((l, i) => `  [Guideline ${i + 1}] ${l}`).join('\n');
-    return `[${world.name} - SYSTEM OVERVIEW]\n${world.keeper.name} presiding.\nSYSTEM GUIDELINES:\n${lawsList}\n\nOPERATIONAL VERBS:\n${verbList}`;
+    return `[${world.name} - SYSTEM OVERVIEW]\nOPERATIONAL VERBS:\n${verbList}`;
   }
   const matchedVerb = (world.verbs || []).find(v => v.name.toLowerCase() === lower);
   if (matchedVerb) {
-    return `${world.keeper.prefix}: "${matchedVerb.help}"`;
+    return `System: ${matchedVerb.help}`;
   }
   for (const ent of (world.entities || [])) {
     if (lower.includes(ent.name.toLowerCase()) || lower.includes((ent.title || '').toLowerCase())) {
@@ -148,10 +147,10 @@ function defaultCommandFallback(world, rawText) {
       if (ent.responses && ent.responses[rv]) {
         return ent.responses[rv];
       }
-      return `[${ent.title.toUpperCase()}]\n${ent.desc}\n${world.keeper.prefix}: "Reached via: ${(ent.reachVerbs || []).join(', ')}."`;
+      return `[${ent.title.toUpperCase()}]\n${ent.desc}\nSystem: reached via: ${(ent.reachVerbs || []).join(', ')}.`;
     }
   }
-  return `${world.keeper.prefix}: "Unrecognized input '${text}'. Available operations: ${(world.verbs || []).map(v => v.name).join(', ')}."`;
+  return `System: unrecognized input '${text}'. Available operations: ${(world.verbs || []).map(v => v.name).join(', ')}.`;
 }
 
 async function generateWorldWithLLM(seedInput, options = {}) {
@@ -194,13 +193,13 @@ async function generateWorldWithLLM(seedInput, options = {}) {
         'CRITICAL TONE DIRECTIVE: The user wants a clean, highly practical and lightweight desktop operating system.',
         'The OS MUST have an authentic, clean computer/Linux texture (file manager, text editor, terminal emulator, system monitor, taskbar, system settings).',
         'Do NOT default to strange eerie mystical or horror fiction. Strangeness should appear ONLY as subtle light seasoning within normal computer reality.',
-        'The interface MUST be "gui". Default keeper should be a system administrator or process supervisor.',
+        'The interface MUST be "gui". Default layout should be a clean desktop workspace.',
         'Entities must represent genuine desktop tools and system applications.'
       ].join(' ');
     } else if (concept !== 'random') {
       conceptInstruction = [
         `INTENT SEED / CONCEPT: "${concept}".`,
-        `The entire operating system MUST be deeply and coherently shaped by this concept: theme, keeper, laws, entities, apps, and vocabulary.`
+        `The entire operating system MUST be deeply and coherently shaped by this concept: theme, entities, apps, and vocabulary.`
       ].join(' ');
     } else {
       conceptInstruction = 'INTENT SEED / CONCEPT: none (generate a novel, coherent operating system environment matching the seed).';
@@ -218,7 +217,6 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       '- theme: string (evocative one-line genre/setting description reflecting the concept)',
       '- concept: string (normalized short concept string)',
       '- palette: array of 4-5 CSS hex colors suited to the atmosphere (e.g. ["#09131b", "#0f2537", "#4ecdc4", "#cbe3db", "#e07a5f"])',
-      '- keeper: object with { name: string, personality: string, idiom: string, prefix: string } (the system supervisor/operator)',
       '- entities: array of 4-6 objects with {',
       '    name: string (slug),',
       '    title: string,',
@@ -240,9 +238,8 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       '      }',
       '    }',
       '  }',
-      '- laws: array of 2-4 core operating principles or system guidelines reflecting the concept',
       '- verbs: array of 5-8 objects with { name: string, help: string }',
-      '- script: array of 3-6 lines of opening system status and greeting in the supervisor voice',
+      '- script: array of 3-6 lines of opening system status and greeting logs',
       '- helpVerb: string (the verb for help, default "help")',
       '- reseedVerb: string (the verb for rebooting/reseeding, default "reseed")',
       '- interface: string ("gui" | "tui" | "device" | "scene", steered by the concept)',
@@ -294,21 +291,8 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     }
     if (!Array.isArray(palette) || palette.length < 3) return fallback;
 
-    // Keeper normalization (accepts object or string name)
-    let keeper = parsed.keeper;
-    if (typeof keeper === 'string') {
-      keeper = {
-        name: keeper,
-        personality: 'mysterious and observant keeper of records',
-        idiom: 'cryptic catalog entries and quiet observations',
-        prefix: keeper.split(' ')[0]
-      };
-    }
-    if (!keeper || typeof keeper.name !== 'string' || !keeper.name.trim()) return fallback;
-
     // Entities normalization
     if (!Array.isArray(parsed.entities) || parsed.entities.length < 4) return fallback;
-    if (!Array.isArray(parsed.laws) || parsed.laws.length < 2) return fallback;
     if (!Array.isArray(parsed.verbs) || parsed.verbs.length < 5) return fallback;
     if (!Array.isArray(parsed.script) || parsed.script.length < 3) return fallback;
 
@@ -421,14 +405,7 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       concept: parsed.concept || concept,
       interface: iface,
       palette,
-      keeper: {
-        name: keeper.name,
-        personality: keeper.personality || 'mysterious and observant',
-        idiom: keeper.idiom || 'cryptic technical jargon',
-        prefix: keeper.prefix || keeper.name.split(' ')[0]
-      },
       entities,
-      laws: parsed.laws,
       verbs,
       bin,
       script: parsed.script,
@@ -499,7 +476,6 @@ async function interpretAppWithLLM(world, entityQuery, options = {}) {
       'Interpret the app script and its physical idiom subjectively into a live, running tactile screen.',
       `World: "${world.name}"`,
       `Theme: "${world.theme}"`,
-      `Keeper: ${world.keeper.name} (${world.keeper.idiom})`,
       `Palette: ${world.palette.join(', ')}`,
       '',
       'Respond ONLY with a single raw JSON object matching this schema:',
@@ -604,24 +580,19 @@ async function generateCommandResponseWithLLM(world, text, history = [], options
       return getFallback();
     }
 
-    const keeper = world.keeper;
-    const lawsStr = world.laws.map((l, i) => `[Law ${i + 1}] ${l}`).join('; ');
-    const entitiesStr = world.entities.map(e => `${e.name} (${e.title})`).join(', ');
-    const verbsStr = world.verbs.map(v => v.name).join(', ');
+    const entitiesStr = (world.entities || []).map(e => `${e.name} (${e.title})`).join(', ');
+    const verbsStr = (world.verbs || []).map(v => v.name).join(', ');
 
     const systemPrompt = [
-      `You are ${keeper.name}, the resident supervisor of the operating system "${world.name}".`,
+      `You are the system shell for the operating system "${world.name}".`,
       `Theme: ${world.theme}.`,
-      `Your personality: ${keeper.personality}.`,
-      `Your idiom: ${keeper.idiom || 'direct, technical, and helpful'}. Speaker prefix: ${keeper.prefix || keeper.name}.`,
-      `System Guidelines: ${lawsStr}.`,
       `Known Entities: ${entitiesStr}.`,
       `Known Verbs: ${verbsStr}. Help verb is "${world.helpVerb || 'help'}". Reseed verb is "${world.reseedVerb || 'reseed'}". Open verb is "${world.openVerb || 'open'}". Home verb is "${world.homeVerb || 'home'}".`,
       `Instructions:`,
-      `- Respond in character as ${keeper.prefix || keeper.name}.`,
+      `- Respond as "System: <message>" with neutral, direct status or instruction.`,
       `- Keep responses concise: 1 to 3 informative sentences.`,
       `- If the user interacts with an entity or app, describe the functional outcome.`,
-      `- If the command is unrecognized, respond clearly without generic "command not found".`,
+      `- If the command is unrecognized, respond clearly: "System: unrecognized command '<command>'. Type 'help' for instructions."`,
       `- If the user asks for help or says "${world.helpVerb || 'help'}", guide them using your available verbs.`
     ].join('\n');
 

@@ -24,7 +24,7 @@ class VirtualFS {
     if (targetPath.startsWith('/')) {
       resolved = path.posix.normalize(targetPath);
     } else if (targetPath.startsWith('~')) {
-      resolved = path.posix.normalize('/home/keeper/' + targetPath.slice(1));
+      resolved = path.posix.normalize('/home/user/' + targetPath.slice(1));
     } else {
       resolved = path.posix.normalize(path.posix.join(this.cwd, targetPath));
     }
@@ -43,14 +43,13 @@ class VirtualFS {
     this.tree.set('/log', { type: 'dir', mtime: now });
     this.tree.set('/dev', { type: 'dir', mtime: now });
 
-    // Populate /etc/laws.conf
-    const lawsText = (world && Array.isArray(world.laws))
-      ? world.laws.map((l, i) => `LAW_${i + 1}=${l}`).join('\n')
-      : 'LAW_1=The screen dims whenever unobserved.\nLAW_2=Nothing entered into the registry can be undone.';
-    this.tree.set('/etc/laws.conf', { type: 'file', content: lawsText, mtime: now });
+    // Populate /etc/system.conf
+    const sysText = `NAME=${(world && world.name) || 'LARPOS'}\nCONCEPT=${(world && world.concept) || 'random'}\nPARADIGM=${(world && world.interface) || 'gui'}\n`;
+    this.tree.set('/etc/system.conf', { type: 'file', content: sysText, mtime: now });
 
     // Populate /etc/interface.spec
-    const ifaceText = `PARADIGM=${(world && world.interface) || 'device'}\nNAME=${(world && world.name) || 'LARPOS'}\nTHEME=${(world && world.theme) || 'Default'}\nCONCEPT=${(world && world.concept) || 'random'}`;
+    const themeDesc = (world && world.concept && world.concept !== 'random') ? world.concept : ((world && world.theme) || 'desktop');
+    const ifaceText = `PARADIGM=${(world && world.interface) || 'device'}\nNAME=${(world && world.name) || 'LARPOS'}\nTHEME=${themeDesc}\nCONCEPT=${(world && world.concept) || 'random'}`;
     this.tree.set('/etc/interface.spec', { type: 'file', content: ifaceText, mtime: now });
 
     // Populate /log/boot.log
@@ -179,7 +178,7 @@ class VirtualFS {
       const mode = item.type === 'dir' ? 'drwxr-xr-x' : '-rw-r--r--';
       const sizeStr = String(item.size).padStart(6, ' ');
       const tag = item.hallucinated ? ' [hallucinated]' : '';
-      return `${mode} 1 keeper keeper ${sizeStr} ${item.mtime} ${item.name}${item.type === 'dir' ? '/' : ''}${tag}`;
+      return `${mode} 1 user user ${sizeStr} ${item.mtime} ${item.name}${item.type === 'dir' ? '/' : ''}${tag}`;
     });
 
     return lines.join('\n');
@@ -351,8 +350,7 @@ class VirtualFS {
           const systemPrompt = [
             `You are the LarpOS terminal shell in world "${(this.world && this.world.name) || 'LARPOS'}".`,
             `Virtual CWD is "${this.cwd}".`,
-            `Theme: ${(this.world && this.world.theme) || 'retro system'}.`,
-            `Keeper: ${(this.world && this.world.keeper && this.world.keeper.name) || 'Keeper'}.`,
+            `Theme: ${(this.world && this.world.theme) || 'desktop system'}.`,
             `Instructions:`,
             `- Do not deliberate or think. Pattern-complete this shell command immediately.`,
             `- Output 1-3 concise lines of authentic terminal or in-world shell response.`,

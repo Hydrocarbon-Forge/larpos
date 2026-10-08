@@ -49,7 +49,6 @@ function serializeWorld(world) {
     worldMeta: world.worldMeta || { concept: world.concept || 'random', generatedAt: world.generatedAt || Date.now() },
     interface: world.interface || 'device',
     palette: world.palette,
-    keeper: world.keeper,
     entities: (world.entities || []).map(e => ({
       name: e.name,
       title: e.title,
@@ -59,7 +58,6 @@ function serializeWorld(world) {
       app: e.app
     })),
     bin: world.bin || [],
-    laws: world.laws || [],
     verbs: world.verbs || [],
     script: world.script || [],
     seed: world.seed,

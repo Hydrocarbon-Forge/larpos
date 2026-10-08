@@ -30,8 +30,6 @@ console.log('1. Testing PRNG and determinism...');
   assert.strictEqual(w1a.name, w1b.name, 'Names must match');
   assert.strictEqual(w1a.theme, w1b.theme, 'Themes must match');
   assert.deepStrictEqual(w1a.palette, w1b.palette, 'Palettes must match');
-  assert.deepStrictEqual(w1a.keeper, w1b.keeper, 'Keepers must match');
-  assert.deepStrictEqual(w1a.laws, w1b.laws, 'Laws must match');
   assert.deepStrictEqual(w1a.script, w1b.script, 'Scripts must match');
   assert.strictEqual(w1a.entities.length, w1b.entities.length, 'Entity counts must match');
   assert.deepStrictEqual(
@@ -52,11 +50,11 @@ console.log('2. Testing seed differentiation & non-collision...');
   assert.notStrictEqual(w1.seed, w2.seed, 'Seed 1 and 2 must have different hex seeds');
   assert.notStrictEqual(w2.seed, w3.seed, 'Seed 2 and 42 must have different hex seeds');
 
-  const signatures = [w1, w2, w3].map(w => `${w.name} | ${w.keeper.name} | ${w.theme}`);
+  const signatures = [w1, w2, w3].map(w => `${w.name} | ${w.theme}`);
   assert.strictEqual(new Set(signatures).size, 3, 'Different seeds must produce distinct worlds');
-  console.log(`  ✓ Seed 1:  "${w1.name}" (${w1.keeper.name})`);
-  console.log(`  ✓ Seed 2:  "${w2.name}" (${w2.keeper.name})`);
-  console.log(`  ✓ Seed 42: "${w3.name}" (${w3.keeper.name})`);
+  console.log(`  ✓ Seed 1:  "${w1.name}"`);
+  console.log(`  ✓ Seed 2:  "${w2.name}"`);
+  console.log(`  ✓ Seed 42: "${w3.name}"`);
 }
 
 // 3. World Spec conformance & Application specification
@@ -71,9 +69,7 @@ console.log('3. Testing world spec schema conformance & generated applications..
     assert(typeof w.openVerb === 'string' && w.openVerb.length > 0, 'world.openVerb must be defined');
     assert(typeof w.homeVerb === 'string' && w.homeVerb.length > 0, 'world.homeVerb must be defined');
     assert(Array.isArray(w.palette) && w.palette.length >= 3 && w.palette.length <= 5, 'world.palette must have 3-5 CSS colors');
-    assert(w.keeper && typeof w.keeper.name === 'string' && typeof w.keeper.personality === 'string' && typeof w.keeper.idiom === 'string', 'world.keeper must have name, personality, idiom');
     assert(Array.isArray(w.entities) && w.entities.length >= 4 && w.entities.length <= 8, 'world.entities must have 4-8 entities');
-    assert(Array.isArray(w.laws) && w.laws.length >= 2 && w.laws.length <= 4, 'world.laws must have 2-4 laws');
     assert(Array.isArray(w.verbs) && w.verbs.length >= 5 && w.verbs.length <= 8, 'world.verbs must have 5-8 verbs');
     assert(Array.isArray(w.script) && w.script.length >= 3 && w.script.length <= 8, 'world.script must have 3-8 lines');
     assert(/^0x[0-9a-f]{8}$/i.test(w.seed), 'world.seed must be valid hex string');
@@ -127,12 +123,12 @@ console.log('5. Testing command layer verbs, open-app, and go-home...');
   for (const v of world.verbs) {
     if (v.name === world.reseedVerb) {
       const hRes = session.executeSync(`help ${v.name}`);
-      assert(hRes && hRes.out.includes(world.keeper.prefix), `Help for '${v.name}' must respond`);
+      assert(hRes && typeof hRes.out === 'string' && hRes.out.length > 0, `Help for '${v.name}' must respond`);
       continue;
     }
     const res = session.executeSync(v.name);
     assert(res && typeof res.out === 'string' && res.out.length > 0, `Verb '${v.name}' on its own must respond`);
-    assert(res.out.includes(world.keeper.prefix) || res.out.toLowerCase().includes(v.name), `Response for '${v.name}' must contain keeper voice or verb help`);
+    assert(res.out.includes('System:') || res.out.toLowerCase().includes(v.name), `Response for '${v.name}' must contain system voice or verb help`);
   }
   console.log(`  ✓ All ${world.verbs.length} verbs respond when queried.`);
 
@@ -168,8 +164,8 @@ console.log('5. Testing command layer verbs, open-app, and go-home...');
   const unknownRes = session.executeSync('hyperjump-xyz-999');
   assert(unknownRes && typeof unknownRes.out === 'string', 'Unknown verb must respond');
   assert(!unknownRes.out.includes('command not found:'), 'Must not be canned "command not found"');
-  assert(unknownRes.out.includes(world.keeper.prefix), 'Must be in keeper\'s voice');
-  console.log(`  ✓ Unknown verb receives in-character keeper reaction:\n    "${unknownRes.out.replace(/\n/g, ' ')}"`);
+  assert(unknownRes.out.includes('System:'), 'Must be in System voice');
+  console.log(`  ✓ Unknown verb receives system reaction:\n    "${unknownRes.out.replace(/\n/g, ' ')}"`);
 }
 
 // 6. Entity Reachability
@@ -363,7 +359,7 @@ console.log('9. Testing HTTP server endpoints...');
     });
 
     if (reply) {
-      console.log(`  ✓ Keeper response generated via LLM:\n    "${reply.slice(0, 120)}..."`);
+      console.log(`  ✓ System response generated via LLM:\n    "${reply.slice(0, 120)}..."`);
     } else {
       console.log('  [NOTE] LLM did not return text within timeout; fallback logic active.');
     }
@@ -399,10 +395,8 @@ console.log('9. Testing HTTP server endpoints...');
     assert(typeof fallbackWorld.name === 'string' && fallbackWorld.name.length > 0, 'Fallback world must have name');
     assert.strictEqual(fallbackWorld.concept, 'submarine', 'Fallback world must preserve concept');
     assert(Array.isArray(fallbackWorld.palette) && fallbackWorld.palette.length >= 3, 'Fallback world must have palette array');
-    assert(fallbackWorld.keeper && typeof fallbackWorld.keeper.name === 'string', 'Fallback world must have keeper');
     assert(Array.isArray(fallbackWorld.entities) && fallbackWorld.entities.length >= 4, 'Fallback world must have entities');
     assert(fallbackWorld.entities.every(e => e.app && e.app.title && e.app.element), 'Every fallback entity must have app');
-    assert(Array.isArray(fallbackWorld.laws) && fallbackWorld.laws.length >= 2, 'Fallback world must have laws');
     assert(Array.isArray(fallbackWorld.verbs) && fallbackWorld.verbs.length >= 5, 'Fallback world must have verbs');
     assert(Array.isArray(fallbackWorld.script) && fallbackWorld.script.length >= 3, 'Fallback world must have script');
     assert.strictEqual(fallbackWorld.seed, new PRNG(777).hexSeed, 'Fallback world must match seed 777');
@@ -415,7 +409,7 @@ console.log('9. Testing HTTP server endpoints...');
       probeTimeout: 500
     });
     assert(fallbackCmd !== null && typeof fallbackCmd === 'string' && fallbackCmd.length > 0, 'Command response on dead port must never resolve to null');
-    assert(fallbackCmd.includes(fallbackWorld.keeper.prefix) || fallbackCmd.includes('OPERATIONAL VERBS'), 'Fallback command must contain in-character content');
+    assert(fallbackCmd.includes('System:') || fallbackCmd.includes('OPERATIONAL VERBS'), 'Fallback command must contain system content');
     console.log(`  ✓ generateCommandResponseWithLLM on dead port resolved valid fallback response:\n    "${fallbackCmd.slice(0, 80).replace(/\n/g, ' ')}..."`);
 
     // Assert app interpreter fallback on dead port
@@ -468,8 +462,8 @@ console.log('9. Testing HTTP server endpoints...');
     assert.strictEqual(vfs.cat('/test-archive/readout.env'), 'PARAM=ACTIVE', 'Virtual cat must return written content');
 
     // Cat virtual configuration
-    const lawsConf = vfs.cat('/etc/laws.conf');
-    assert(lawsConf.includes('LAW_1'), 'Virtual /etc/laws.conf must be populated from world spec');
+    const ifaceSpec = vfs.cat('/etc/interface.spec');
+    assert(ifaceSpec.includes('PARADIGM='), 'Virtual /etc/interface.spec must be populated from world spec');
 
     // HALLUCINATION MECHANIC: cd into nonexistent directory materializes it
     const halluRes = vfs.cd('/uncharted/folder/archive9');
@@ -556,7 +550,6 @@ console.log('9. Testing HTTP server endpoints...');
     assert(parsed !== null, 'Engine must parse .larp file');
     assert.strictEqual(parsed.name, world.name, 'Parsed world name must match');
     assert.strictEqual(parsed.seed, world.seed, 'Parsed world seed must match');
-    assert.strictEqual(parsed.laws.length, world.laws.length, 'Parsed laws count must match');
     assert.strictEqual(parsed.entities.length, world.entities.length, 'Parsed entities count must match');
 
     // Live file watcher test
@@ -572,26 +565,22 @@ console.log('9. Testing HTTP server endpoints...');
     }, { disableLLM: true });
 
     try {
-      // Live mutate file on disk: append a new law
-      const newLine = JSON.stringify({ section: 'law', rule: 'The steam pressure shall never drop below three atmospheres.' }) + '\n';
+      // Live mutate file on disk: append a new bin utility
+      const newLine = JSON.stringify({ section: 'bin', name: 'boiler-vent', behavior: 'The steam pressure shall never drop below three atmospheres.' }) + '\n';
       fs.appendFileSync(testLarpPath, newLine, 'utf8');
 
       // Wait for watcher/poll
       await new Promise(r => setTimeout(r, 200));
       assert(watcherFired, 'watchWorldLarp callback must trigger on file edit');
-      assert(liveReloadedWorld && liveReloadedWorld.laws.some(l => l.includes('three atmospheres')), 'Live reloaded world must reflect edited law');
+      assert(liveReloadedWorld && liveReloadedWorld.bin.some(b => b.name === 'boiler-vent'), 'Live reloaded world must reflect edited bin');
       console.log('  ✓ Live file edit detected; OS re-parsed itself without restart.');
     } finally {
       watcher.close();
       if (fs.existsSync(testLarpPath)) fs.unlinkSync(testLarpPath);
     }
 
-    // In-world mutation: rewrite law & add bin
+    // In-world mutation: add bin
     const session = new CommandSession(world, { disableLLM: true });
-    const mutateLawRes = session.executeSync('rewrite law The sky is forged of tarnished zinc.');
-    assert(mutateLawRes.mutated === true, 'In-world rewrite law verb must flag mutated=true');
-    assert(session.world.laws.some(l => l.includes('tarnished zinc')), 'World laws must contain updated law');
-
     const addBinRes = session.executeSync('add bin steam-purge Vents high-pressure gas from all chambers.');
     assert(addBinRes.mutated === true, 'In-world add bin verb must flag mutated=true');
     const runBinRes = session.executeSync('steam-purge');
@@ -603,8 +592,6 @@ console.log('9. Testing HTTP server endpoints...');
       assert(typeof w.name === 'string' && w.name.length > 0, `${label}: world.name must be non-empty string`);
       assert(typeof w.theme === 'string' && w.theme.length > 0, `${label}: world.theme must be non-empty string`);
       assert(Array.isArray(w.palette) && w.palette.length >= 3, `${label}: world.palette must have at least 3 colors`);
-      assert(w.keeper && typeof w.keeper.name === 'string', `${label}: world.keeper must have a name`);
-      assert(Array.isArray(w.laws) && w.laws.length >= 1, `${label}: world.laws must have at least 1 law`);
       assert(Array.isArray(w.entities) && w.entities.length >= 1, `${label}: world.entities must have at least 1 entity`);
       for (const ent of w.entities) {
         assert(ent.app && typeof ent.app.title === 'string', `${label}: entity ${ent.name} must have app definition`);
@@ -615,12 +602,12 @@ console.log('9. Testing HTTP server endpoints...');
       assert(['gui', 'tui', 'device', 'scene'].includes(w.interface), `${label}: world.interface must be valid paradigm`);
     }
 
-    const looseProse = 'In the submerged iron cathedral of St. Jude, monks tend the pressure vents. Law 1: Never open the lower hatch. Cmd vent-dump: releases excess steam into the courtyard.';
+    const looseProse = 'In the submerged iron cathedral of St. Jude, monks tend the pressure vents. Cmd vent-dump: releases excess steam into the courtyard.';
 
     // 16a. Offline path
     const offlineWorld = await parseLarp(looseProse, { disableLLM: true });
     assertWorldValidity(offlineWorld, 'Offline loose text interpretation');
-    console.log(`  ✓ Offline loose text interpretation valid: "${offlineWorld.name}" [interface: ${offlineWorld.interface}] with ${offlineWorld.laws.length} laws, ${offlineWorld.entities.length} apps, ${offlineWorld.bin.length} bins.`);
+    console.log(`  ✓ Offline loose text interpretation valid: "${offlineWorld.name}" [interface: ${offlineWorld.interface}] with ${offlineWorld.entities.length} apps, ${offlineWorld.bin.length} bins.`);
 
     // 16b. LLM path (interprets subjectively when model is up; falls back automatically if offline)
     const llmWorld = await parseLarp(looseProse, {
@@ -628,7 +615,7 @@ console.log('9. Testing HTTP server endpoints...');
       timeout: 25000
     });
     assertWorldValidity(llmWorld, 'LLM loose text interpretation');
-    console.log(`  ✓ LLM loose text interpretation valid: "${llmWorld.name}" [interface: ${llmWorld.interface}] (source: ${llmWorld.isLLM ? 'LLM' : 'fallback'}) with ${llmWorld.laws.length} laws, ${llmWorld.entities.length} apps, ${llmWorld.bin.length} bins.`);
+    console.log(`  ✓ LLM loose text interpretation valid: "${llmWorld.name}" [interface: ${llmWorld.interface}] (source: ${llmWorld.isLLM ? 'LLM' : 'fallback'}) with ${llmWorld.entities.length} apps, ${llmWorld.bin.length} bins.`);
   }
 
   // 17. Post-Boot Kiosk Disguise & Escape Suppression (Spec §9, Acceptance Criterion 10)

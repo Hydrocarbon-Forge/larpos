@@ -590,54 +590,19 @@ const RAILWAY_ENTITY_TEMPLATES = [
   }
 ];
 
-const GENERAL_LAWS = [
-  'Unsaved buffers are flushed to persistent storage during shutdown.',
-  'Filesystem modifications require valid path references.',
-  'System services maintain active process isolation.',
-  'Background tasks execute within allocated time slices.',
-  'Virtual memory partitions are synchronized periodically.'
-];
-
-const SUBMARINE_LAWS = [
-  'Hull integrity hatches must remain dog-latched at depth.',
-  'Variable ballast tanks must be balanced prior to propulsion advance.',
-  'Hydrophone arrays take priority over active acoustic emissions.',
-  'Atmospheric scrubbing systems operate continuously on closed circuit.'
-];
-
-const RAILWAY_LAWS = [
-  'Block section occupancy must be verified prior to signal clearance.',
-  'Boiler water injectors must be tested at every crew shift.',
-  'Switches and interlockings must be locked before motive movement.',
-  'Timetable orders take precedence over local dispatch improvisation.'
-];
-
-const DESKTOP_LAWS = [
-  'User processes execute with non-privileged workspace rights.',
-  'Virtual directories /bin, /apps, /etc, /log, /dev are mounted read-only by default.',
-  'Desktop application states are saved to local session sidecars.',
-  'Screen geometry dynamically adapts to window frame constraints.'
-];
-
 const STANDARD_VERBS = [
   { name: 'help', help: 'help [verb] — display system guidance and command syntax.' },
   { name: 'open', help: 'open [app] — launch an application into its workspace screen.' },
   { name: 'home', help: 'home — return to the main desktop or overview.' },
   { name: 'reseed', help: 'reseed — reboot the environment with a new concept prompt.' },
   { name: 'status', help: 'status — display overall operating system status.' },
-  { name: 'apps', help: 'apps — list all available applications.' },
-  { name: 'laws', help: 'laws — inspect core system guidelines.' }
+  { name: 'apps', help: 'apps — list all available applications.' }
 ];
 
 const BIN_COMMANDS = [
   { name: 'sysinfo', behavior: 'Prints kernel version, uptime, and system statistics.' },
   { name: 'netstat', behavior: 'Displays active network connections and sockets.' },
   { name: 'sync', behavior: 'Flushes virtual memory buffers to storage.' }
-];
-
-const SUPERVISOR_NAMES = [
-  'Operator Vance', 'Supervisor Chen', 'Administrator Miller', 'Operator Hayes',
-  'Host Daemon', 'System Supervisor', 'Operator Kowalski', 'Supervisor Alvarez'
 ];
 
 function generateWorld(seedInput, conceptInput) {
@@ -696,18 +661,9 @@ function generateWorld(seedInput, conceptInput) {
   const palGen = palettes.generatePalette(prng.seedInt, concept);
   const palette = palGen.array;
 
-  // Supervisor / Keeper
-  const supervisorName = prng.choice(SUPERVISOR_NAMES);
-  const keeper = {
-    name: supervisorName,
-    personality: 'Attentive, technical, and precise',
-    idiom: 'Operational telemetry and direct diagnostics',
-    prefix: supervisorName.split(' ')[0]
-  };
-
   const unknownResponses = [
-    (cmd) => `${keeper.name}: "Unrecognized command '${cmd}'. Type 'help' to review available operational commands."`,
-    (cmd) => `${keeper.name}: "The system does not recognize '${cmd}'. Check syntax or consult 'help'."`
+    (cmd) => `System: unrecognized command '${cmd}'. Type 'help' to review available operational commands.`,
+    (cmd) => `System: command '${cmd}' not recognized. Check syntax or consult 'help'.`
   ];
 
   // Entity Pool Selection
@@ -726,7 +682,7 @@ function generateWorld(seedInput, conceptInput) {
     const coreSlugs = ['file-manager', 'terminal', 'settings', 'resource-monitor', 'text-editor'];
     const coreEntities = GENERAL_ENTITY_TEMPLATES.filter(e => coreSlugs.includes(e.name));
     const optionalEntities = GENERAL_ENTITY_TEMPLATES.filter(e => !coreSlugs.includes(e.name));
-    const extraCount = prng.int(0, 1);
+    const extraCount = prng.int(1, 3);
     const extra = prng.sample(optionalEntities, extraCount);
     selectedEntities = [...coreEntities, ...extra];
   } else {
@@ -753,15 +709,6 @@ function generateWorld(seedInput, conceptInput) {
     }
   }));
 
-  // Laws
-  let lawsPool = GENERAL_LAWS;
-  if (isPractical) lawsPool = DESKTOP_LAWS;
-  else if (isSubmarine) lawsPool = SUBMARINE_LAWS;
-  else if (isRailway) lawsPool = RAILWAY_LAWS;
-
-  const lawCount = prng.int(2, Math.min(4, lawsPool.length));
-  const laws = prng.sample(lawsPool, lawCount);
-
   // Verbs
   const verbs = STANDARD_VERBS.map(v => ({ ...v }));
 
@@ -781,9 +728,7 @@ function generateWorld(seedInput, conceptInput) {
     concept,
     interface: iface,
     palette,
-    keeper,
     entities,
-    laws,
     verbs,
     bin: binCommands,
     script,
