@@ -89,6 +89,14 @@ function serializeToLarp(world) {
     }
   }
 
+  // 6. design section (embedded design spec, design/composition.md §3.1)
+  if (world.designSpec) {
+    lines.push(JSON.stringify({
+      section: 'design',
+      spec: world.designSpec
+    }));
+  }
+
   return lines.join('\n') + '\n';
 }
 
@@ -784,6 +792,16 @@ function writeWorldLarp(world, stateDir = null) {
   const filePath = getWorldLarpPath(world.seed, dir);
   const larpContent = serializeToLarp(world);
   fs.writeFileSync(filePath, larpContent, 'utf8');
+
+  // Sidecar design spec (design/composition.md §3.1)
+  if (world.designSpec) {
+    try {
+      const cleanSeed = String(world.seed || 'default').replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const sidecarPath = path.join(dir, `world-${cleanSeed}.design.json`);
+      fs.writeFileSync(sidecarPath, JSON.stringify(world.designSpec, null, 2), 'utf8');
+    } catch (_) {}
+  }
+
   return filePath;
 }
 

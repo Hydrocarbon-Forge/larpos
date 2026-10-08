@@ -11,7 +11,43 @@
       --accent: #4ecdc4;
       --fg: #d2e4de;
       --dim: #e07a5f;
+      --highlight: #f3826f;
       --font-mono: ui-monospace, "DejaVu Sans Mono", "Courier New", Courier, monospace;
+      --font-main: ui-sans-serif, system-ui, "DejaVu Sans", sans-serif;
+
+      /* Cohesion Token Table (§2.1 in design/composition.md) */
+      --p-bg: var(--bg);
+      --p-surface: var(--surface);
+      --p-surface-2: var(--surface);
+      --p-accent: var(--accent);
+      --p-accent-2: var(--dim);
+      --p-text: var(--fg);
+      --p-text-dim: var(--dim);
+      --p-border: var(--surface);
+      --p-ok: #67c08a;
+      --p-warn: #d7a04a;
+      --p-danger: #d06a5a;
+      --p-glow: var(--accent);
+
+      --u: 16px;
+      --sp-1: 8px;
+      --sp-2: 16px;
+      --sp-3: 24px;
+      --sp-4: 32px;
+      --radius: 0px;
+      --border-w: 1px;
+      --font-base: 13px;
+      --font-primary: var(--font-main);
+
+      --bar-s: 24px;
+      --bar-m: 36px;
+      --bar-l: 48px;
+      --bar-xl: 64px;
+      --icon-stroke: 1.5px;
+
+      --motion-hover: 120ms;
+      --motion-press: 80ms;
+      --motion-blink: 600ms;
     }
 
     * {
@@ -1352,6 +1388,87 @@
       root.style.setProperty('--dim', palette[4] || palette[2]);
     }
 
+    // Cohesion Pass (§2.1 in design/composition.md)
+    function applyTokens(tokens) {
+      if (!tokens || typeof tokens !== 'object') return;
+      const root = document.documentElement;
+      if (tokens.color && typeof tokens.color === 'object') {
+        const c = tokens.color;
+        if (c.bg) { root.style.setProperty('--p-bg', c.bg); root.style.setProperty('--bg', c.bg); }
+        if (c.surface) { root.style.setProperty('--p-surface', c.surface); root.style.setProperty('--surface', c.surface); }
+        if (c.surface2) { root.style.setProperty('--p-surface-2', c.surface2); }
+        if (c.accent) { root.style.setProperty('--p-accent', c.accent); root.style.setProperty('--accent', c.accent); }
+        if (c.accent2) { root.style.setProperty('--p-accent-2', c.accent2); }
+        if (c.text) { root.style.setProperty('--p-text', c.text); root.style.setProperty('--fg', c.text); }
+        if (c.textDim) { root.style.setProperty('--p-text-dim', c.textDim); root.style.setProperty('--dim', c.textDim); }
+        if (c.border) { root.style.setProperty('--p-border', c.border); }
+        if (c.ok) { root.style.setProperty('--p-ok', c.ok); }
+        if (c.warn) { root.style.setProperty('--p-warn', c.warn); }
+        if (c.danger) { root.style.setProperty('--p-danger', c.danger); }
+        if (c.glow) { root.style.setProperty('--p-glow', c.glow); root.style.setProperty('--highlight', c.glow); }
+      }
+      if (tokens.unit !== undefined) root.style.setProperty('--u', `${tokens.unit}px`);
+      if (Array.isArray(tokens.spacing) && tokens.spacing.length >= 4) {
+        root.style.setProperty('--sp-1', `${tokens.spacing[0]}px`);
+        root.style.setProperty('--sp-2', `${tokens.spacing[1]}px`);
+        root.style.setProperty('--sp-3', `${tokens.spacing[2]}px`);
+        root.style.setProperty('--sp-4', `${tokens.spacing[3]}px`);
+      }
+      if (tokens.radiusPx !== undefined) root.style.setProperty('--radius', `${tokens.radiusPx}px`);
+      if (tokens.borderW !== undefined) root.style.setProperty('--border-w', `${tokens.borderW}px`);
+      if (tokens.fontBasePx !== undefined) root.style.setProperty('--font-base', `${tokens.fontBasePx}px`);
+
+      if (tokens.font && typeof tokens.font === 'object') {
+        if (tokens.font.primary) {
+          root.style.setProperty('--font-primary', tokens.font.primary);
+          root.style.setProperty('--font-main', tokens.font.primary);
+        }
+        if (tokens.font.mono) {
+          root.style.setProperty('--font-mono', tokens.font.mono);
+        }
+      }
+
+      if (tokens.stripH && typeof tokens.stripH === 'object') {
+        if (tokens.stripH.s !== undefined) root.style.setProperty('--bar-s', `${tokens.stripH.s}px`);
+        if (tokens.stripH.m !== undefined) root.style.setProperty('--bar-m', `${tokens.stripH.m}px`);
+        if (tokens.stripH.l !== undefined) root.style.setProperty('--bar-l', `${tokens.stripH.l}px`);
+        if (tokens.stripH.xl !== undefined) root.style.setProperty('--bar-xl', `${tokens.stripH.xl}px`);
+      }
+
+      if (tokens.icon && tokens.icon.strokeW !== undefined) {
+        root.style.setProperty('--icon-stroke', `${tokens.icon.strokeW}px`);
+      }
+
+      if (tokens.motion && typeof tokens.motion === 'object') {
+        if (tokens.motion.hoverMs !== undefined) root.style.setProperty('--motion-hover', `${tokens.motion.hoverMs}ms`);
+        if (tokens.motion.pressMs !== undefined) root.style.setProperty('--motion-press', `${tokens.motion.pressMs}ms`);
+        if (tokens.motion.blinkMs !== undefined) root.style.setProperty('--motion-blink', `${tokens.motion.blinkMs}ms`);
+      }
+    }
+
+    // Action ref execution grammar (§4.5 in design/blocks.md)
+    function executeActionRef(refStr) {
+      if (!refStr || typeof refStr !== 'string') return;
+      const parts = refStr.trim().split(':');
+      const action = parts[0].toLowerCase();
+      const target = parts.slice(1).join(':');
+
+      if (action === 'open-app' && target) {
+        openApp(target);
+      } else if (action === 'focus-app' && target) {
+        focusWindow(target.includes('window') ? target : `${target}-window`);
+      } else if (action === 'close-app') {
+        closeActiveApp();
+      } else if (action === 'toggle' && target) {
+        const el = document.getElementById(target);
+        if (el) el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+      } else if (action === 'run' && target) {
+        submitCommand(target);
+      } else if (action === 'sound' && target) {
+        playAudioCue(target);
+      }
+    }
+
     function switchView(viewName) {
       activeView = viewName;
       if (viewName === 'boot') {
@@ -1828,13 +1945,29 @@
     // SECTION 11: DETERMINISTIC PARADIGM DOM INSTANTIATORS
     // =========================================================
     function instantiateGui(world, spec, grammar, palette) {
-      const wpStyle = (spec.aestheticParams && spec.aestheticParams.wallpaperStyle) || 'mesh';
+      const blocks = spec.blocks || [];
+      const wpBlock = blocks.find(b => b.block === 'wallpaper');
+      const wpStyle = (wpBlock && wpBlock.style) || (spec.aestheticParams && spec.aestheticParams.wallpaperStyle) || 'mesh';
       let wpBg = 'background: radial-gradient(at 100% 0%, var(--accent) 0px, transparent 50%), radial-gradient(at 0% 100%, var(--surface) 0px, transparent 50%), var(--bg); opacity: 0.9;';
       if (wpStyle === 'radial') wpBg = 'background: radial-gradient(circle at center, var(--surface) 0%, var(--bg) 80%);';
       if (wpStyle === 'lines') wpBg = 'background: repeating-linear-gradient(45deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 2px, transparent 2px, transparent 12px), var(--bg);';
 
       let iconsHtml = '';
-      if (Array.isArray(world.entities)) {
+      const iconBlocks = blocks.filter(b => b.block === 'icon' && (b.zone === 'desktop' || !b.zone));
+      if (iconBlocks.length > 0) {
+        iconBlocks.forEach(ib => {
+          const subj = ib.subject || ib.appRef || 'app';
+          const svg = drawIconClient(grammar, subj, world.seed, palette);
+          const title = ib.label || ib.id;
+          const action = (ib.hooks && ib.hooks.click) ? ib.hooks.click : `open-app:${ib.appRef || ib.id}`;
+          iconsHtml += `
+            <div class="gui-desktop-icon" onclick="executeActionRef('${action}')" title="Open ${title}">
+              ${svg}
+              <div class="gui-desktop-icon-label">${title}</div>
+            </div>
+          `;
+        });
+      } else if (Array.isArray(world.entities)) {
         world.entities.forEach(ent => {
           const svg = drawIconClient(grammar, ent.name, world.seed, palette);
           const title = (ent.app && ent.app.title) ? ent.app.title : ent.title;
@@ -2150,6 +2283,10 @@
       currentWorld = world;
       document.title = world.name;
       applyPalette(world.palette);
+
+      if (world.designSpec && world.designSpec.tokens) {
+        applyTokens(world.designSpec.tokens);
+      }
 
       if (world.designSpec && world.designSpec.bankPulls && world.designSpec.bankPulls.fonts) {
         const f = world.designSpec.bankPulls.fonts[0] || 'sans_clean';
