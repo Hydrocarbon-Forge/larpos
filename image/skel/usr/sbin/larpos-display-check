@@ -1,0 +1,63 @@
+#!/bin/sh
+# /usr/sbin/larpos-display-check
+# Diagnostic utility for LarpOS display attach & GPU plumbing
+
+echo "=========================================================="
+echo "           LarpOS Display Diagnostic Check                "
+echo "=========================================================="
+
+echo ""
+echo "[1] Kernel & System Info:"
+uname -a 2>&1
+
+echo ""
+echo "[2] DRM & Display Device Nodes:"
+if [ -d /dev/dri ]; then
+    ls -la /dev/dri 2>&1
+else
+    echo "WARNING: /dev/dri directory does NOT exist!"
+fi
+ls -la /dev/fb* 2>/dev/null || echo "No framebuffer devices found (/dev/fb*)"
+
+echo ""
+echo "[3] Current User & Group Database:"
+id 2>&1
+echo "Device group memberships:"
+getent group video render seat input 2>&1 || grep -E "^(video|render|seat|input):" /etc/group 2>&1 || true
+
+echo ""
+echo "[4] OpenRC Runlevel Service State:"
+echo "--- sysinit runlevel ---"
+rc-status sysinit 2>&1 || true
+echo "--- default runlevel ---"
+rc-status default 2>&1 || true
+
+echo ""
+echo "[5] Running Processes (udevd, mdev, seatd, cage):"
+ps aux 2>/dev/null | grep -E "udevd|mdev|seatd|cage|Xorg" | grep -v grep 2>&1 || true
+
+echo ""
+echo "[6] Seatd Socket & Runtime Directory State:"
+ls -ld /run/seatd /run/seatd.sock "${XDG_RUNTIME_DIR:-/tmp/runtime-root}" 2>&1 || true
+if [ -d /run/seatd ]; then
+    ls -la /run/seatd 2>&1
+fi
+if [ -n "$XDG_RUNTIME_DIR" ] && [ -d "$XDG_RUNTIME_DIR" ]; then
+    ls -la "$XDG_RUNTIME_DIR" 2>&1
+fi
+
+echo ""
+echo "[7] Recent Cage / wlroots Log (/var/log/larpos-cage.log):"
+if [ -f /var/log/larpos-cage.log ]; then
+    tail -n 35 /var/log/larpos-cage.log 2>&1
+else
+    echo "No /var/log/larpos-cage.log found."
+fi
+
+echo ""
+echo "[8] Kernel DRM & GPU Log (dmesg tail):"
+dmesg | tail -n 35 2>&1
+
+echo "=========================================================="
+echo "Diagnostic check complete."
+echo "=========================================================="

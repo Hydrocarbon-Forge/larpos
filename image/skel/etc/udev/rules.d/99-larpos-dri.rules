@@ -1,0 +1,7 @@
+# /etc/udev/rules.d/99-larpos-dri.rules
+# Guarantee permissions on DRM graphics cards and render nodes for kiosk user
+
+SUBSYSTEM=="drm", KERNEL=="card[0-9]*", GROUP="video", MODE="0660"
+SUBSYSTEM=="drm", KERNEL=="renderD[0-9]*", GROUP="render", MODE="0660"
+# Also allow fallback to group video for render nodes if render group differs
+SUBSYSTEM=="drm", KERNEL=="renderD[0-9]*", GROUP="video", MODE="0660"
