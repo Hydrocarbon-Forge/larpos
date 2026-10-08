@@ -322,6 +322,98 @@ Once booted, there is **no way to see it's a browser** (item 6):
   app gets added mid-play) — the spec file updates, the UI re-renders. The OS
   is never frozen at boot.
 
+### 11. Concept-primary tone + real skin/paradigm rendering (Nathan, 2026-10-08)
+
+The concept prompt is the PRIMARY driver of the OS. The baked-in gimmicks
+(hallucinated FS markers, stratum logs, keeper, laws, verbs, live re-interpret)
+are always present as *mechanisms*, but the *visible tone* must match the
+concept. "A highly practical and lightweight desktop operating system" → a
+normal, practical desktop with normal computer/Linux texture (files, terminal,
+taskbar, system settings); the strangeness appears only as light seasoning that
+fits the fiction, never as the default sci-fi look. No concept / random → the
+strange inhabited-reality tone is allowed. The "eerie hallucinated reality"
+framing moves OUT of the default system prompt and INTO the concept-conditioned
+instruction.
+
+**Design banks + composition (NOT preset skins).** No fixed "windows-xp
+pack" that forces a whole look onto a world. Instead `app/banks/` ships curated
+*building blocks* a world **pulls from only as much as it needs**:
+
+- `fonts.js` — a font bank: named family stacks present in the image (monospace
+  tiers, a flat sans, a serif, a display weight). A world pulls 1-2 stacks.
+- `icons.js` — an **icon-grammar bank**: a set of *style functions* (flat-line,
+  duotone, glyph, pictogram, hand-drawn stroke) that, given a subject
+  (folder/terminal/file/trash/system/gauge...) and a seed, **procedurally draw the
+  SVG**. A world pulls a grammar (or a blend) + a subject set; nothing is a
+  shared pre-rendered set.
+- `sounds.js` — a **sound bank**: synthesized short cues (boot, click, error,
+  open, alarm) as tiny generated WAV/OGG + a few parametric generators (a blip
+  with pitch/decay/ring). A world pulls a handful; a tty world may pull *none*.
+- `palettes.js` — a **palette generator**: seeded HSL/OKLCH ramps, not 5 fixed
+  palettes. The world's concept steers the hue/saturation/lightness *bands*; the
+  seed sets exact values. (Replaces the old `world.palette` as a fixed 5-array.)
+
+**One fast design decision, then a deterministic instantiator.** A single *small*
+low-thinking LLM call (or seeded PRNG offline) emits a compact **design spec**:
+`paradigm`, which bank items to pull (fonts, icon grammar, sounds, palette bands),
+**topology** (where the bar/menu/chrome lives: bottom bar, top menu, side rail, no
+chrome), and a few **aesthetic params** (radius range, spacing/density, accent
+hue, motion amount). A **pure-JS seeded instantiator** then materializes the real
+DOM/CSS/SVG from that spec. Seeded ⇒ same world looks the same; different worlds
+genuinely differ. Nothing is "edited for the sake of it" because nothing is a
+template — every value is generated from the seed, and the LLM only makes the
+*structural* choices (a user expects "a bar at the bottom"; the LLM picks that),
+while the exact radius/height/position/glyphs are seeded inside the chosen
+structure. The LLM never emits pixel values.
+
+**Paradigms rebuild the DOM, they do not re-skin it.** The current four
+paradigms are CSS re-skins of one layout — that's the bug behind "it doesn't
+really do gui". Each paradigm must build its OWN DOM:
+
+- `gui` → a real desktop: wallpaper layer (procedural from palette/skin),
+  desktop icons (the entities, as apps), **draggable, closable windows** with
+  titlebars (world verbs as the close/home glyphs), a taskbar with a start-like
+  menu (lists apps) and a clock, the terminal as one of the windows.
+- `tui` → full-screen monospace box-drawing layout (no gradient, no cards):
+  header line, app panels in ASCII frames, command line at the bottom, keyboard-
+  first.
+- `device` → instrument console: gauges/dials/levers as real SVG instruments
+  (not text boxes), readouts, the terminal as a log panel.
+- `scene` → diegetic space: the entities ARE the scene; no chrome; interaction
+  by pointing/verbs.
+- `invented` (LLM may name its own paradigm) → the LLM emits a short
+  `paradigmSpec` (layout zones, chrome elements, interaction style) and the UI
+  builds from it; on parse failure, fall back to `gui`.
+
+The concept steers paradigm + banks together ("desktop OS" → gui + flat font +
+icon grammar + bottom bar + a few sounds; "terminal" → tui + monospace + no
+icons; "machine" → device + instrument gauges). The four-paradigm CSS
+re-skins are REMOVED (reduced to base tokens) so paradigms can never look
+identical. The design spec is cached with the world and is what the UI renders
+from — the instantiator runs client-side, so the kiosk is fast and the look is
+stable per world.
+
+**Boot-request correctness (bug fixes).**
+
+- The LLM world-gen timeout on `POST /api/boot` is 25s — too short for the
+  local 27B box under load; raise to a configurable default (env
+  `LARPOS_WORLD_TIMEOUT_MS`, default 120000) and log actual duration to
+  `/var/log/larpos-server.log`. On LLM timeout/failure the UI shows a visible
+  `[BOOT] local brain unreachable — offline reality` line (never a silent
+  weird fallback).
+- Race: two concurrent world generations (pre-boot random + user concept) can
+  interleave such that the user's world is shadowed or the pre-boot one wins.
+  Server-side: serialize generation through a queue and tag the active world
+  with the concept that produced it (`worldMeta = { concept, generatedAt }`);
+  `GET /api/world` returns `202 {booting:true}` while a generation is in flight
+  (even if a stale world exists). UI: after a concept is submitted, only accept
+  a `200` world whose `concept` matches the submitted one (or `random` if the
+  user submitted blank); the background poll must not accept a pre-boot world
+  once a concept is pending.
+- Input UX: while a concept boot or command is in flight, the inputs are
+  disabled (further typing/Enter ignored) and a visible progress line shows
+  elapsed seconds; re-enabled when the response lands.
+
 ## Acceptance criteria
 
 1. `node app/server.js` (zero deps) serves `/`, `/api/world`, `/api/command` on :8080.
@@ -350,3 +442,16 @@ Once booted, there is **no way to see it's a browser** (item 6):
 10. Post-boot disguise: global key/click capture, right-click and browser shortcuts
     blocked, no URL/tab/scrollbar cues, in-world `Esc`. Selftest verifies the
     handlers exist and the suppressed shortcuts fire no browser behavior.
+11. Tone + design (per §11): with concept "a highly practical and lightweight
+    desktop operating system" the rendered OS reads as a *normal practical
+    desktop* (taskbar/menu present, neutral texture, no default sci-fi) and a
+    second boot with a wildly different concept renders a clearly different
+    paradigm/layout/color/geometry — no two worlds share the same template look.
+    Bank pulls are selective (a tui world references no icon bank items). The
+    design spec is seeded: identical seed+concept ⇒ identical design spec; the
+    instantiator is deterministic. `POST /api/boot` world-gen timeout is
+    configurable (`LARPOS_WORLD_TIMEOUT_MS`, default 120000) and duration is
+    logged; an in-flight generation makes `GET /api/world` return `202
+    {booting:true}` and the UI only accepts a world tagged with the submitted
+    concept; inputs are disabled with a visible elapsed-time line while a boot
+    or command is in flight.
