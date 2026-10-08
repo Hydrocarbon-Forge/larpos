@@ -2513,6 +2513,11 @@ function generateWorld(seedInput, conceptInput) {
   };
 
   try {
+    const { generateDesignSpec } = require('./design');
+    world.designSpec = generateDesignSpec(world);
+  } catch (_) {}
+
+  try {
     const { writeWorldLarp } = require('./larp');
     writeWorldLarp(world);
   } catch (_) {}

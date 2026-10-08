@@ -446,6 +446,11 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     console.log(`[LarpOS] World generation completed via LLM in ${duration}ms (seed: ${hexSeed}, concept: "${concept}")`);
 
     try {
+      const { generateDesignSpec } = require('./design');
+      world.designSpec = generateDesignSpec(world);
+    } catch (_) {}
+
+    try {
       getLarpModule().writeWorldLarp(world);
     } catch (_) {}
 
