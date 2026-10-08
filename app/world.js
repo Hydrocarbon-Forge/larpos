@@ -737,10 +737,110 @@ const ENTITY_APPS = {
         flip: 'You flip the wooden eccentric cam. The heavy wool pad presses against the bronze rim; the thunderous ringing is quenched in an instant, leaving profound, heavy silence.'
       }
     }
+  },
+
+  // 9. practical_desktop
+  'file-manager': {
+    title: 'FILE MANAGER // NAUTILUS-LITE',
+    format: 'filing-cabinet',
+    screen: 'A clean, lightweight two-pane directory explorer displaying /home/kiosk and virtual mount points. Files are organized into neat column lists with size in kilobytes and permissions rw-r--r--.',
+    element: {
+      name: 'directory-browser',
+      label: 'Browse Directory Tree',
+      type: 'button',
+      state: 'ready',
+      action: 'browse',
+      responses: {
+        browse: 'You navigate to /home/kiosk/documents. The pane refreshes instantly, listing project notes, system manifests, and user configs.'
+      }
+    }
+  },
+  'terminal-emulator': {
+    title: 'TERMINAL EMULATOR // XTERM-256',
+    format: 'terminal',
+    screen: 'A crisp 80x24 monospace virtual console with a green block cursor blinking steadily at 1Hz against a pitch-black window. Fast VT100 emulation is ready for shell input.',
+    element: {
+      name: 'shell-prompt-key',
+      label: 'Spawn Subshell Process',
+      type: 'button',
+      state: 'idle',
+      action: 'spawn',
+      responses: {
+        spawn: 'A fresh PTS pseudoterminal session spawns with sub-millisecond latency: /bin/sh PID 1402 ready.'
+      }
+    }
+  },
+  'text-editor': {
+    title: 'TEXT EDITOR // FEATHEREDIT',
+    format: 'register',
+    screen: 'A distraction-free, zero-latency plain text editor loaded with syntax highlighting for config scripts and shell commands. UTF-8 encoding is detected and clean.',
+    element: {
+      name: 'buffer-save',
+      label: 'Commit Buffer To Disk',
+      type: 'button',
+      state: 'clean',
+      action: 'save',
+      responses: {
+        save: 'Buffer written: 142 lines, 4,096 bytes committed to virtual storage without errors.'
+      }
+    }
+  },
+  'system-monitor': {
+    title: 'SYSTEM MONITOR // HTOP GAUGE',
+    format: 'gauge',
+    screen: 'Real-time telemetry dials showing CPU utilization across cores, memory consumption (214MB used / 1024MB total), swap activity, and a compact table of top user processes.',
+    element: {
+      name: 'proc-refresh',
+      label: 'Refresh Process Telemetry',
+      type: 'dial',
+      state: 'nominal',
+      action: 'refresh',
+      responses: {
+        refresh: 'Process table refreshed: load average 0.04, 0.02, 0.00; RAM usage at a razor-thin 18%.'
+      }
+    }
+  },
+  'network-settings': {
+    title: 'NETWORK MANAGER // WPA-PANEL',
+    format: 'dial',
+    screen: 'Interface status panel reporting eth0: UP (192.168.1.72/24), wlan0: IDLE, loopback: 127.0.0.1. DNS resolution latency is 1.2ms to the gateway.',
+    element: {
+      name: 'interface-toggle',
+      label: 'Toggle Network Interface',
+      type: 'toggle',
+      state: 'connected',
+      action: 'toggle',
+      responses: {
+        toggle: 'Interface eth0 state queried: link detected at 1000Mbps Full Duplex; RX packets 41,209 / TX packets 38,114.'
+      }
+    }
+  },
+  'task-scheduler': {
+    title: 'TASK SCHEDULER // CRON DAEMON',
+    format: 'register',
+    screen: 'A lightweight queue of periodic background tasks, hourly log rotation, and disk cleanup routines. All daemon timers are synchronized to UTC.',
+    element: {
+      name: 'scheduler-trigger',
+      label: 'Trigger Scheduled Cron Job',
+      type: 'button',
+      state: 'idle',
+      action: 'trigger',
+      responses: {
+        trigger: 'Scheduled maintenance sweep dispatched: /etc/periodic/daily completed in 40ms.'
+      }
+    }
   }
 };
 
 const ARCHETYPE_META = {
+  'practical_desktop': {
+    openVerb: 'launch',
+    homeVerb: 'minimize',
+    extraVerbs: [
+      { name: 'launch', help: 'launch [app] — open an application window on the desktop.' },
+      { name: 'minimize', help: 'minimize — minimize the active application and return to desktop overview.' }
+    ]
+  },
   'brine_beacon': {
     openVerb: 'unveil',
     homeVerb: 'watch',
@@ -807,6 +907,151 @@ const ARCHETYPE_META = {
 };
 
 const ARCHETYPES = [
+  {
+    id: 'practical_desktop',
+    nameTemplates: [
+      (p) => `LARP DESKTOP // WORKSTATION ${p.choice(['PRO', 'SLIM', 'LITE', 'ZERO'])}`,
+      (p) => `ALPINE WORKBENCH // OS-${p.int(10, 99)}`,
+      (p) => `PRACTICAL LINUX ENVIRONMENT // BUILD ${p.int(1000, 9999)}`,
+      (p) => `LIGHTWEIGHT DESKTOP // TILE-${p.choice(['V1', 'V2', 'LITE'])}`
+    ],
+    themes: [
+      'a highly practical, clean, and lightweight Linux desktop environment; neutral panels, low RAM overhead, and utility tools',
+      'a minimal desktop workstation focused on productivity, text editing, file management, and terminal workflows',
+      'a fast, distraction-free graphical operating system with low resource consumption and a responsive terminal'
+    ],
+    palettes: [
+      ['#181825', '#1e1e2e', '#89b4fa', '#cdd6f4', '#45475a'],
+      ['#16191d', '#1f242c', '#00b4d8', '#edf2f7', '#4a5568'],
+      ['#212529', '#2b3035', '#20c997', '#f8f9fa', '#6c757d']
+    ],
+    keepers: [
+      {
+        name: 'Sysadmin Vance',
+        personality: 'efficient and practical system administrator; keeps memory low, uptime high, and zero desktop bloat',
+        idiom: 'Linux commands, system memory, process PIDs, and clean desktop utility',
+        prefix: 'Vance',
+        unknownResponses: [
+          (cmd) => `Vance adjusts his terminal font: "'${cmd}' is not an executable binary in $PATH. Type 'help' for desktop verbs or launch a utility app."`,
+          (cmd) => `Vance checks the process table: "Command '${cmd}' returned code 127. Try launch, minimize, status, edit, or exec."`
+        ]
+      },
+      {
+        name: 'Daemon Dispatcher Ruth',
+        personality: 'precise background supervisor tracking background services, file sockets, and desktop responsiveness',
+        idiom: 'socket connections, buffer caches, uptime, and desktop launch verbs',
+        prefix: 'Ruth',
+        unknownResponses: [
+          (cmd) => `Ruth signals an alert: "No handler registered for '${cmd}'. Consult system help or check open windows."`,
+          (cmd) => `Ruth reports: "Operation '${cmd}' not supported by desktop shell. Use launch, minimize, status, edit, or exec."`
+        ]
+      }
+    ],
+    lawsPool: [
+      'Background processes must not exceed 64 megabytes of resident memory.',
+      'All user configurations remain in human-readable plain text files.',
+      'Applications launch instantaneously without splash screens or telemetry bloat.',
+      'The desktop stays responsive even under heavy compilation workloads.'
+    ],
+    helpVerb: 'help',
+    reseedVerb: 'reboot',
+    verbsPool: [
+      { name: 'launch', help: 'launch [app] — open an application window on the desktop.' },
+      { name: 'minimize', help: 'minimize — minimize the active application and return to desktop overview.' },
+      { name: 'status', help: 'status [target] — query system status, memory allocation, or interface state.' },
+      { name: 'edit', help: 'edit [target] — open file or config in the lightweight text editor.' },
+      { name: 'exec', help: 'exec [command] — execute a utility command in the virtual subshell.' },
+      { name: 'help', help: 'help — display available workstation verbs and desktop applications.' },
+      { name: 'reboot', help: 'reboot — restart the desktop session into a fresh workstation (reboot).' }
+    ],
+    entitiesPool: [
+      {
+        name: 'file-manager',
+        title: 'File Manager',
+        aliases: ['files', 'nautilus', 'explorer', 'dirs', 'folders'],
+        kind: 'desktop file explorer',
+        desc: 'A minimal two-pane directory manager showing /home/kiosk and virtual system volumes.',
+        reachVerbs: ['launch', 'status', 'edit'],
+        responses: {
+          launch: 'File Manager launched: /home/kiosk directory tree populated with documents, bin, and scripts.',
+          status: 'Storage volume status: 1.4GB available on virtual rootfs; inode utilization 4%.',
+          edit: 'Selected default file association: text files open directly in FeatherEdit.'
+        }
+      },
+      {
+        name: 'terminal-emulator',
+        title: 'Terminal Emulator',
+        aliases: ['terminal', 'xterm', 'shell', 'console', 'cli'],
+        kind: 'POSIX virtual terminal',
+        desc: 'A responsive 80x24 monospace xterm emulator running an ash subshell.',
+        reachVerbs: ['launch', 'exec', 'status'],
+        responses: {
+          launch: 'Terminal window mapped to workspace: PTS session opened on /dev/pts/1.',
+          exec: 'Executed test echo in subshell: return code 0, latency 0.4ms.',
+          status: 'Subshell status: active job 1, environment clean, UTF-8 locale validated.'
+        }
+      },
+      {
+        name: 'text-editor',
+        title: 'Text Editor',
+        aliases: ['editor', 'featheredit', 'nano', 'vim', 'edit'],
+        kind: 'lightweight code and text editor',
+        desc: 'Distraction-free text editing utility with syntax highlighting and quick buffer save.',
+        reachVerbs: ['launch', 'edit', 'status'],
+        responses: {
+          launch: 'FeatherEdit window opened with scratch buffer ready for typing.',
+          edit: 'Loaded active buffer: line wrap enabled, UTF-8 encoding confirmed.',
+          status: 'Editor status: 0 unsaved changes, memory usage 12MB.'
+        }
+      },
+      {
+        name: 'system-monitor',
+        title: 'System Monitor',
+        aliases: ['htop', 'monitor', 'top', 'perf', 'cpu', 'memory'],
+        kind: 'real-time task telemetry gauge',
+        desc: 'Compact activity monitor reporting live CPU core usage, memory charts, and task load.',
+        reachVerbs: ['launch', 'status', 'exec'],
+        responses: {
+          launch: 'System Monitor window active: 4 cores idling at 2%, RAM footprint 182MB.',
+          status: 'System health: load average 0.02, thermal sensors 38°C, zero swapped pages.',
+          exec: 'Sent telemetry refresh pulse to kernel stats daemon.'
+        }
+      },
+      {
+        name: 'network-settings',
+        title: 'Network Manager',
+        aliases: ['network', 'wifi', 'net', 'wpa', 'ip', 'eth0'],
+        kind: 'networking connection utility',
+        desc: 'Network interface control panel managing local IP routing, loopback, and sockets.',
+        reachVerbs: ['launch', 'status', 'edit'],
+        responses: {
+          launch: 'Network Manager opened: eth0 link state UP, gateway 192.168.1.1 reachable.',
+          status: 'Interface statistics: 0 packet drops, ping latency to gateway 0.8ms.',
+          edit: 'Opened network interface profile /etc/network/interfaces.'
+        }
+      },
+      {
+        name: 'task-scheduler',
+        title: 'Task Scheduler',
+        aliases: ['cron', 'scheduler', 'anacron', 'timer', 'tasks'],
+        kind: 'background daemon scheduler',
+        desc: 'Lightweight cron manager for periodic workstation maintenance and timers.',
+        reachVerbs: ['launch', 'status', 'exec'],
+        responses: {
+          launch: 'Task Scheduler window opened displaying active cron table and hourly jobs.',
+          status: 'Scheduler status: daemon PID 412 healthy, next maintenance at 04:00.',
+          exec: 'Triggered immediate execution of test logrotate daemon script.'
+        }
+      }
+    ],
+    scriptGenerator: (keeper, entities, p) => [
+      `[SYSTEM INIT // BOOT COMPLETE // UPTIME 0:0${p.int(1, 9)}]`,
+      `${keeper.prefix.toUpperCase()}: "Workstation ready. Desktop session initialized with zero bloat."`,
+      `${keeper.prefix.toUpperCase()}: "Utility applications available: ${entities.map(e => e.title).join(', ')}."`,
+      `${keeper.prefix.toUpperCase()}: "Type 'launch [app]' or use the terminal to manage your workflow."`,
+      `[DAEMON: 184MB RAM used, 0 swap active, system load 0.01]`
+    ]
+  },
   {
     id: 'brine_beacon',
     nameTemplates: [
@@ -2064,6 +2309,11 @@ for (const arch of ARCHETYPES) {
 
 
 const ARCHETYPE_BINS = {
+  practical_desktop: [
+    { name: 'uptime', behavior: 'Prints system uptime and process load average.' },
+    { name: 'free', behavior: 'Displays free and used physical memory and swap metrics.' },
+    { name: 'top', behavior: 'Displays live CPU utilization by active system tasks.' }
+  ],
   brine_beacon: [
     { name: 'depth-ping', behavior: 'Emits an acoustic sounding wave forty fathoms into the glassy void.' },
     { name: 'trim-wick', behavior: 'Scrapes tallow carbon from the burner mantle.' }
@@ -2111,6 +2361,9 @@ function generateWorld(seedInput, conceptInput) {
   if (concept !== 'random') {
     const cLow = concept.toLowerCase();
     const matches = [];
+    if (/\b(practical|lightweight|desktop|fast|minimal|linux|work|office|utility|productivity|workstation|pc)\b/i.test(cLow)) {
+      matches.push('practical_desktop');
+    }
     if (/\b(lighthouse|pharos|beacon|sea|ocean|brine|salt|tallow|foghorn|underwater|submarine|water|nautical|mariner|coast|reef|glass)\b/i.test(cLow)) {
       matches.push('brine_beacon');
     }
@@ -2148,7 +2401,9 @@ function generateWorld(seedInput, conceptInput) {
 
   // Steer interface paradigm (gui / tui / device / scene)
   let iface = null;
-  if (concept !== 'random') {
+  if (archetype.id === 'practical_desktop') {
+    iface = 'gui';
+  } else if (concept !== 'random') {
     const cLow = concept.toLowerCase();
     if (/\b(terminal|tui|cli|shell|console|curses|matrix|bbs)\b/i.test(cLow)) {
       iface = 'tui';
@@ -2156,12 +2411,13 @@ function generateWorld(seedInput, conceptInput) {
       iface = 'device';
     } else if (/\b(room|scene|dream|kitchen|monastery|forest|bog|table|shrine|hall)\b/i.test(cLow)) {
       iface = 'scene';
-    } else if (/\b(desktop|gui|window|windows|office|system|workbench|workstation|panel)\b/i.test(cLow)) {
+    } else if (/\b(desktop|gui|window|windows|office|system|workbench|workstation|panel|practical|lightweight)\b/i.test(cLow)) {
       iface = 'gui';
     }
   }
   if (!iface) {
     const archeDefault = {
+      practical_desktop: 'gui',
       brine_beacon: 'device',
       dead_god_cranium: 'scene',
       ash_railway: 'device',
