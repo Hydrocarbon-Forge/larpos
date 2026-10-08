@@ -92,11 +92,11 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
     CAGE_LOG="/var/log/larpos-cage.log"
     touch "$CAGE_LOG" 2>/dev/null || CAGE_LOG="/tmp/larpos-cage.log"
 
-    # Wait up to ~10s for /dev/dri/card0 to exist AND be openable by kiosk
     DRI_NODE="/dev/dri/card0"
-    DRI_READY=0
 
-    for i in $(seq 1 10); do
+    # Fast initial probe (up to 5s) for immediate boot
+    DRI_READY=0
+    for i in $(seq 1 5); do
         if [ -e "$DRI_NODE" ] && [ -r "$DRI_NODE" ]; then
             DRI_READY=1
             break
@@ -104,39 +104,72 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
         sleep 1
     done
 
-    # Refresh seatd socket symlink if socket appeared during wait
+    # Refresh seatd socket symlink in case seatd appeared
     if [ -S /run/seatd.sock ]; then
         ln -sf /run/seatd.sock "$XDG_RUNTIME_DIR/seatd.sock"
     fi
 
     if [ "$DRI_READY" -eq 1 ]; then
         exec cage -- firefox-esr --kiosk http://127.0.0.1:8080/ 2>> "$CAGE_LOG"
-    else
-        echo "=== [LarpOS Display Diagnostic: DRM Attach Timeout] ==="
-        echo "Notice: $DRI_NODE is not available or readable by kiosk after 10s."
+    fi
+
+    # GPU attach failed or device node not openable: stay on tty1 console
+    echo ""
+    echo "=========================================================="
+    echo "GPU attach failed — kiosk needs a reachable display"
+    echo "=========================================================="
+    echo "Notice: $DRI_NODE is not available or readable by $(whoami)."
+    echo ""
+    echo "--- Diagnostic State ---"
+    ls -l /dev/dri 2>&1 || true
+    id
+    getent group video render 2>&1 || grep -E "^(video|render):" /etc/group 2>&1 || true
+    ls -ld /run/seatd /run/seatd.sock "$XDG_RUNTIME_DIR" 2>&1 || true
+    ls -la /run/seatd 2>/dev/null || true
+    dmesg | tail -30 2>&1 || true
+    echo "=========================================================="
+    echo "Retrying GPU display attach every 5s for up to 3 minutes..."
+
+    # Also log diagnostic state to /var/log/larpos-cage.log
+    {
+        echo "=========================================================="
+        echo "GPU attach failed — kiosk needs a reachable display"
+        date
         ls -l /dev/dri 2>&1 || true
         id
         getent group video render 2>&1 || grep -E "^(video|render):" /etc/group 2>&1 || true
         ls -ld /run/seatd /run/seatd.sock "$XDG_RUNTIME_DIR" 2>&1 || true
         ls -la /run/seatd 2>/dev/null || true
         dmesg | tail -30 2>&1 || true
-        echo "=== [Falling back to WLR_BACKENDS=headless] ==="
+        echo "=========================================================="
+    } >> "$CAGE_LOG" 2>&1
 
-        {
-            echo "=== [LarpOS Display Diagnostic: DRM Attach Timeout] ==="
-            date
-            ls -l /dev/dri 2>&1 || true
-            id
-            getent group video render 2>&1 || grep -E "^(video|render):" /etc/group 2>&1 || true
-            ls -ld /run/seatd /run/seatd.sock "$XDG_RUNTIME_DIR" 2>&1 || true
-            ls -la /run/seatd 2>/dev/null || true
-            dmesg | tail -30 2>&1 || true
-            echo "========================================================"
-        } >> "$CAGE_LOG" 2>&1
+    # Retry loop: check every ~5s for up to 3 minutes (36 iterations * 5s = 180s)
+    # in case the device node appears late due to udev / driver initialization
+    MAX_RETRIES=36
+    RETRY_COUNT=0
+    while [ "$RETRY_COUNT" -lt "$MAX_RETRIES" ]; do
+        sleep 5
+        RETRY_COUNT=$((RETRY_COUNT + 1))
 
-        export WLR_BACKENDS=headless
-        exec cage -- firefox-esr --kiosk http://127.0.0.1:8080/ 2>> "$CAGE_LOG"
-    fi
+        if [ -S /run/seatd.sock ]; then
+            ln -sf /run/seatd.sock "$XDG_RUNTIME_DIR/seatd.sock"
+        fi
+
+        if [ -e "$DRI_NODE" ] && [ -r "$DRI_NODE" ]; then
+            echo "GPU device $DRI_NODE detected and openable on retry $RETRY_COUNT! Launching cage..."
+            exec cage -- firefox-esr --kiosk http://127.0.0.1:8080/ 2>> "$CAGE_LOG"
+        fi
+        echo "[Retry $RETRY_COUNT/$MAX_RETRIES] Waiting for $DRI_NODE..."
+    done
+
+    # If still unavailable after retries, leave tty1 diagnostic visible (do NOT hide the screen)
+    echo ""
+    echo "=========================================================="
+    echo "GPU attach failed after 3 minutes: no reachable display."
+    echo "Kiosk halted on tty1 console. Diagnostic visible above."
+    echo "You may run /usr/sbin/larpos-display-check to inspect state."
+    echo "=========================================================="
 fi
 EOF
 
