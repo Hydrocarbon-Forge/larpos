@@ -1,3 +1,4 @@
+const { writeWorldLarp } = require('./larp');
 // app/world.js — Coherent seeded world generator for LarpOS
 
 const { PRNG } = require('./prng');
@@ -2062,6 +2063,42 @@ for (const arch of ARCHETYPES) {
 }
 
 
+
+const ARCHETYPE_BINS = {
+  brine_beacon: [
+    { name: 'depth-ping', behavior: 'Emits an acoustic sounding wave forty fathoms into the glassy void.' },
+    { name: 'trim-wick', behavior: 'Scrapes tallow carbon from the burner mantle.' }
+  ],
+  dead_god_cranium: [
+    { name: 'trepan-vent', behavior: 'Opens cranial relief cock to release amber steam.' },
+    { name: 'galvanic-tick', behavior: 'Applies copper current to the coronal seam.' }
+  ],
+  ash_railway: [
+    { name: 'whistle', behavior: 'Blows the pressurized steam horn across the permafrost.' },
+    { name: 'stoke-chute', behavior: 'Feeds three shovels of anthracite into Car 04 stove.' }
+  ],
+  monastic_loom: [
+    { name: 'weft-tally', behavior: 'Counts liturgical knot rows woven since matins.' },
+    { name: 'bodkin-pass', behavior: 'Clears tangled linen fibers from the reed.' }
+  ],
+  flooded_kitchen: [
+    { name: 'scupper-kick', behavior: 'Dislodges grease from the floor drain to swirl floodwater.' },
+    { name: 'tea-pour', behavior: 'Pours boiling chicory water into an enamel cup.' }
+  ],
+  orbital_solarium: [
+    { name: 'starlight-steer', behavior: 'Focuses refracted violet beams onto the algae bed.' },
+    { name: 'mist-blast', behavior: 'Releases pressurized jasmine aerosol across the trellis.' }
+  ],
+  glacial_scriptorium: [
+    { name: 'bell-strike', behavior: 'Rings the brass clerk hand-bell down the blue-ice hallway.' },
+    { name: 'thaw-wire-pulse', behavior: 'Warms nichrome wire to release a frozen vellum folio.' }
+  ],
+  chime_foundry: [
+    { name: 'strike-core', behavior: 'Taps the lead mallet against the twelve-ton master bell.' },
+    { name: 'sand-sift', behavior: 'Tests cooling silicate loam for acoustic cracks.' }
+  ]
+};
+
 function generateWorld(seedInput, conceptInput) {
   const prng = new PRNG(seedInput);
 
@@ -2110,6 +2147,34 @@ function generateWorld(seedInput, conceptInput) {
     archetype = prng.choice(ARCHETYPES);
   }
 
+  // Steer interface paradigm (gui / tui / device / scene)
+  let iface = null;
+  if (concept !== 'random') {
+    const cLow = concept.toLowerCase();
+    if (/\b(terminal|tui|cli|shell|console|curses|matrix|bbs)\b/i.test(cLow)) {
+      iface = 'tui';
+    } else if (/\b(cockpit|device|gauge|submarine|machine|instrument|meter|analog|valve|dial)\b/i.test(cLow)) {
+      iface = 'device';
+    } else if (/\b(room|scene|dream|kitchen|monastery|forest|bog|table|shrine|hall)\b/i.test(cLow)) {
+      iface = 'scene';
+    } else if (/\b(desktop|gui|window|windows|office|system|workbench|workstation|panel)\b/i.test(cLow)) {
+      iface = 'gui';
+    }
+  }
+  if (!iface) {
+    const archeDefault = {
+      brine_beacon: 'device',
+      dead_god_cranium: 'scene',
+      ash_railway: 'device',
+      monastic_loom: 'scene',
+      flooded_kitchen: 'scene',
+      orbital_solarium: 'gui',
+      glacial_scriptorium: 'tui',
+      chime_foundry: 'device'
+    }[archetype.id] || 'device';
+    iface = prng.choice(['device', 'tui', 'gui', 'scene', archeDefault]);
+  }
+
   const name = archetype.nameTemplates[prng.int(0, archetype.nameTemplates.length - 1)](prng);
   let theme = prng.choice(archetypes(archetype.id).themes || archetype.themes);
   if (concept !== 'random') {
@@ -2141,8 +2206,10 @@ function generateWorld(seedInput, conceptInput) {
   const lawCount = prng.int(2, Math.min(4, archetype.lawsPool.length));
   const selectedLaws = prng.sample(archetype.lawsPool, lawCount);
 
+  // Bin commands
+  const binCommands = (ARCHETYPE_BINS[archetype.id] || []).map(b => ({ ...b }));
+
   // Verbs: select 5-8 verbs
-  // Ensure helpVerb, reseedVerb, openVerb, and homeVerb are included!
   const allVerbs = archetype.verbsPool.slice();
   const helpVerbObj = allVerbs.find(v => v.name === archetype.helpVerb);
   const reseedVerbObj = allVerbs.find(v => v.name === archetype.reseedVerb);
@@ -2169,15 +2236,17 @@ function generateWorld(seedInput, conceptInput) {
     prefix: keeperTemplate.prefix
   };
 
-  return {
+  const world = {
     name,
     theme,
     concept,
+    interface: iface,
     palette,
     keeper,
     entities: selectedEntities,
     laws: selectedLaws,
     verbs,
+    bin: binCommands,
     script,
     seed: prng.hexSeed,
     archetypeId: archetype.id,
@@ -2187,8 +2256,13 @@ function generateWorld(seedInput, conceptInput) {
     homeVerb: archetype.homeVerb,
     unknownResponseGenerators: keeperTemplate.unknownResponses
   };
-}
 
+  try {
+    writeWorldLarp(world);
+  } catch (_) {}
+
+  return world;
+}
 function interpretAppCombinatorial(world, entityQuery) {
   const clean = String(entityQuery || '').toLowerCase().trim();
   let entity = (world.entities || []).find(e =>

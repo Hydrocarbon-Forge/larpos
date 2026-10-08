@@ -5,6 +5,7 @@
 const http = require('http');
 const { PRNG } = require('./prng');
 const { generateWorld, interpretAppCombinatorial, createDamagedAppShell } = require('./world');
+const { writeWorldLarp } = require('./larp');
 
 function getLLMBase() {
   return process.env.LLM_BASE || 'http://192.168.1.72:8080';
@@ -214,6 +215,8 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       '- script: array of 3-6 lines of opening monologue / boot telemetry in keeper voice',
       '- helpVerb: string (the world-specific verb for help)',
       '- reseedVerb: string (the world-specific verb for rebooting/reseeding)',
+      '- interface: string ("gui" | "tui" | "device" | "scene", steered by the concept)',
+      '- bin: array of 2-3 objects with { name: string, behavior: string } (custom commands for local bin)',
       '- openVerb: string (the world-specific verb for opening an app, e.g. "unveil", "trepan", "board", "unfold")',
       '- homeVerb: string (the world-specific verb for returning to the overview, e.g. "watch", "vault", "berth", "selvedge")'
     ].join('\n');
@@ -354,10 +357,23 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       };
     });
 
-    return {
+    let iface = ['gui', 'tui', 'device', 'scene'].includes(parsed.interface) ? parsed.interface : fallback.interface;
+    let bin = Array.isArray(parsed.bin) ? parsed.bin.map(b => ({
+      name: String(b.name || 'cmd').toLowerCase().trim(),
+      behavior: String(b.behavior || 'System command').trim()
+    })) : fallback.bin;
+
+    for (const b of bin) {
+      if (!verbs.some(v => v.name === b.name)) {
+        verbs.push({ name: b.name, help: `${b.name} — ${b.behavior}` });
+      }
+    }
+
+    const world = {
       name: parsed.name.trim(),
       theme: parsed.theme.trim(),
       concept: parsed.concept || concept,
+      interface: iface,
       palette,
       keeper: {
         name: keeper.name,
@@ -368,6 +384,7 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       entities,
       laws: parsed.laws,
       verbs,
+      bin,
       script: parsed.script,
       seed: hexSeed,
       helpVerb,
@@ -376,6 +393,12 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       homeVerb,
       isLLM: true
     };
+
+    try {
+      writeWorldLarp(world);
+    } catch (_) {}
+
+    return world;
   } catch (_) {
     // Catch ANY failure (network error, timeout, unparsable JSON) and return combinatorial fallback
     return fallback;

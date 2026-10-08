@@ -8,6 +8,7 @@ const path = require('path');
 const { generateWorld, interpretAppCombinatorial } = require('./world');
 const { CommandSession } = require('./commands');
 const { getLLMBase, generateWorldWithLLM, interpretAppWithLLM } = require('./llm');
+const { writeWorldLarp, readWorldLarp, watchWorldLarp, getWorldLarpPath } = require('./larp');
 
 function parseCliArgs() {
   let seed = process.env.LARPOS_SEED;
@@ -43,9 +44,10 @@ function serializeWorld(world) {
     name: world.name,
     theme: world.theme,
     concept: world.concept || 'random',
+    interface: world.interface || 'device',
     palette: world.palette,
     keeper: world.keeper,
-    entities: world.entities.map(e => ({
+    entities: (world.entities || []).map(e => ({
       name: e.name,
       title: e.title,
       kind: e.kind,
@@ -53,15 +55,17 @@ function serializeWorld(world) {
       reachVerbs: e.reachVerbs,
       app: e.app
     })),
-    laws: world.laws,
-    verbs: world.verbs,
-    script: world.script,
+    bin: world.bin || [],
+    laws: world.laws || [],
+    verbs: world.verbs || [],
+    script: world.script || [],
     seed: world.seed,
     openVerb: world.openVerb || 'open',
     homeVerb: world.homeVerb || 'home',
     helpVerb: world.helpVerb || 'help',
     reseedVerb: world.reseedVerb || 'reseed',
-    source: world.isLLM ? 'llm' : 'combinatorial'
+    source: world.isLLM ? 'llm' : 'combinatorial',
+    isParsedFromLarp: !!world.isParsedFromLarp
   };
 }
 
@@ -72,11 +76,32 @@ function createServer(initialSeed, port = 8080, options = {}) {
   // Baseline fallback world
   let activeWorld = options.initialWorld || generateWorld(initialSeed, options.concept);
 
+  // Write .larp file at boot and re-parse as source of truth
+  let activeLarpPath = writeWorldLarp(activeWorld);
+  const parsedFromLarp = readWorldLarp(activeLarpPath);
+  if (parsedFromLarp) {
+    activeWorld = parsedFromLarp;
+  }
+
+  let larpWatcher = null;
+  const setupWatcher = (filePath) => {
+    if (larpWatcher) larpWatcher.close();
+    larpWatcher = watchWorldLarp(filePath, (updatedWorld) => {
+      activeWorld = updatedWorld;
+      session.setWorld(updatedWorld);
+      console.log(`[LarpOS] Live reloaded active world from ${filePath}: "${updatedWorld.name}"`);
+    });
+  };
+
+  setupWatcher(activeLarpPath);
+
   const session = new CommandSession(activeWorld, {
     disableLLM,
     llmBase,
     onReseed: (newWorld) => {
       activeWorld = newWorld;
+      activeLarpPath = writeWorldLarp(newWorld);
+      setupWatcher(activeLarpPath);
       console.log(`[LarpOS] Reality reseeded: "${activeWorld.name}" (${activeWorld.seed}) [${activeWorld.isLLM ? 'LLM' : 'combinatorial'}]`);
     }
   });
@@ -157,7 +182,11 @@ function createServer(initialSeed, port = 8080, options = {}) {
         }
 
         activeWorld = newWorld;
-        session.setWorld(newWorld);
+        activeLarpPath = writeWorldLarp(newWorld);
+        const parsed = readWorldLarp(activeLarpPath);
+        if (parsed) activeWorld = parsed;
+        setupWatcher(activeLarpPath);
+        session.setWorld(activeWorld);
 
         const publicWorld = serializeWorld(activeWorld);
         res.writeHead(200, {
@@ -290,9 +319,13 @@ function createServer(initialSeed, port = 8080, options = {}) {
           closeApp: !!result.closeApp,
           appUpdated: !!result.appUpdated,
           elementState: result.elementState || null,
-          seed: activeWorld.seed
+          seed: activeWorld.seed,
+          cwd: result.cwd || (session.vfs ? session.vfs.pwd() : '/'),
+          hallucinated: !!result.hallucinated,
+          vfs: !!result.vfs,
+          mutated: !!result.mutated
         };
-        if (result.reseeded && result.world) {
+        if ((result.reseeded && result.world) || (result.mutated && result.world)) {
           payload.world = serializeWorld(result.world);
         }
 
@@ -315,13 +348,22 @@ function createServer(initialSeed, port = 8080, options = {}) {
     res.end('Not Found');
   });
 
+  server.on('close', () => {
+    if (larpWatcher) larpWatcher.close();
+  });
+
   return {
     server,
     session,
     getWorld: () => activeWorld,
+    getActiveLarpPath: () => activeLarpPath,
     setWorld: (w) => {
       activeWorld = w;
       session.setWorld(w);
+    },
+    close: () => {
+      if (larpWatcher) larpWatcher.close();
+      server.close();
     }
   };
 }

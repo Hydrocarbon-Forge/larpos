@@ -3,6 +3,9 @@
 
 const { generateWorld, interpretAppCombinatorial } = require('./world');
 const { generateWorldWithLLM, interpretAppWithLLM, generateCommandResponseWithLLM } = require('./llm');
+const { VirtualFS } = require('./vfs');
+const { appendSessionLog } = require('./storage');
+const { writeWorldLarp } = require('./larp');
 
 class CommandSession {
   constructor(world, options = {}) {
@@ -12,12 +15,28 @@ class CommandSession {
     this.onReseed = options.onReseed || null;
     this.disableLLM = !!options.disableLLM;
     this.llmBase = options.llmBase || null;
+    this.vfs = new VirtualFS(world);
   }
 
   setWorld(world) {
     this.world = world;
     this.history = [];
     this.currentApp = null;
+    if (this.vfs) {
+      this.vfs.setWorld(world);
+    } else {
+      this.vfs = new VirtualFS(world);
+    }
+  }
+
+  logSession(input, output) {
+    if (this.world && this.world.seed) {
+      appendSessionLog(this.world.seed, {
+        input,
+        output,
+        cwd: this.vfs ? this.vfs.pwd() : '/'
+      });
+    }
   }
 
   recordCommand(record) {
@@ -57,6 +76,14 @@ class CommandSession {
   }
 
   executeFallback(rawText) {
+    const res = this._executeFallbackInternal(rawText);
+    if (res && res.out) {
+      this.logSession(rawText, res.out);
+    }
+    return res;
+  }
+
+  _executeFallbackInternal(rawText) {
     const text = (rawText || '').trim();
     if (!text) {
       return {
@@ -128,6 +155,55 @@ class CommandSession {
       const out = `${this.world.keeper.prefix}: "You step back from the ${appName} and return to the central overview."`;
       this.recordCommand({ text, verb: 'home', out, failed: false });
       return { out, closeApp: true };
+    }
+
+    // 2.5 Live mutation check
+    if (lower.startsWith('rewrite law ') || lower.startsWith('add law ')) {
+      const newLaw = text.replace(/^(rewrite|add)\s+law\s+/i, '').trim();
+      if (newLaw) {
+        if (lower.startsWith('rewrite law ') && Array.isArray(this.world.laws) && this.world.laws.length > 0) {
+          this.world.laws[this.world.laws.length - 1] = newLaw;
+        } else {
+          if (!Array.isArray(this.world.laws)) this.world.laws = [];
+          this.world.laws.push(newLaw);
+        }
+        writeWorldLarp(this.world);
+        const out = `${this.world.keeper.prefix}: "The operational law has been rewritten:\n  -> ${newLaw}"`;
+        this.recordCommand({ text, verb: 'rewrite', out, failed: false });
+        return { out, mutated: true, world: this.world };
+      }
+    }
+
+    if (lower.startsWith('add bin ') || lower.startsWith('new bin ')) {
+      const rest = text.replace(/^(add|new)\s+bin\s+/i, '').trim();
+      const bparts = rest.split(/\s+/);
+      const bName = bparts[0];
+      const bBehavior = bparts.slice(1).join(' ').trim() || 'A dynamically added binary utility.';
+      if (bName) {
+        if (!this.world.bin) this.world.bin = [];
+        this.world.bin.push({ name: bName.toLowerCase(), behavior: bBehavior });
+        if (!this.world.verbs.some(v => v.name.toLowerCase() === bName.toLowerCase())) {
+          this.world.verbs.push({ name: bName.toLowerCase(), help: `${bName} — ${bBehavior}` });
+        }
+        this.vfs.setWorld(this.world);
+        writeWorldLarp(this.world);
+        const out = `${this.world.keeper.prefix}: "Utility '${bName}' inscribed into /bin and .larp manifest."`;
+        this.recordCommand({ text, verb: 'add-bin', out, failed: false });
+        return { out, mutated: true, world: this.world };
+      }
+    }
+
+    // 2.6 Virtual filesystem & shell check
+    const vfsCheck = this.vfs.executeSync(text);
+    if (vfsCheck !== null) {
+      const out = vfsCheck.out || (vfsCheck.cwd ? `[CWD: ${vfsCheck.cwd}]` : '');
+      this.recordCommand({ text, verb: text.split(/\s+/)[0], out, failed: false });
+      return {
+        out,
+        cwd: this.vfs.pwd(),
+        hallucinated: vfsCheck.hallucinated,
+        vfs: true
+      };
     }
 
     // Parse leading verb + args
@@ -400,7 +476,30 @@ class CommandSession {
       const appName = prevApp ? (prevApp.app ? prevApp.app.title : prevApp.title) : 'apparatus';
       const out = `${this.world.keeper.prefix}: "You step back from the ${appName} and return to the central overview."`;
       this.recordCommand({ text, verb: 'home', out, failed: false });
+      this.logSession(text, out);
       return { out, closeApp: true };
+    }
+
+    // Live mutation check
+    if (lower.startsWith('rewrite law ') || lower.startsWith('add law ') || lower.startsWith('add bin ') || lower.startsWith('new bin ')) {
+      return this.executeFallback(rawText);
+    }
+
+    // Virtual filesystem & shell check
+    if (this.vfs.executeSync(text) !== null) {
+      const vfsRes = await this.vfs.executeAsync(text, {
+        disableLLM: this.disableLLM || options.disableLLM,
+        llmBase: this.llmBase
+      });
+      const out = (vfsRes && vfsRes.out) || (vfsRes && vfsRes.cwd ? `[CWD: ${vfsRes.cwd}]` : '');
+      this.recordCommand({ text, verb: text.split(/\s+/)[0], out, failed: false });
+      this.logSession(text, out);
+      return {
+        out,
+        cwd: this.vfs.pwd(),
+        hallucinated: vfsRes ? vfsRes.hallucinated : false,
+        vfs: true
+      };
     }
 
     // Open App check: live-interpreted via LLM if available
@@ -425,6 +524,7 @@ class CommandSession {
         ].join('\n');
 
         this.recordCommand({ text, verb: 'open', entity: targetEntity.name, out, failed: false });
+        this.logSession(text, out);
         return {
           out,
           openApp: targetEntity.name,
@@ -445,6 +545,7 @@ class CommandSession {
 
         if (llmOut && typeof llmOut === 'string' && llmOut.trim().length > 0) {
           this.recordCommand({ text, out: llmOut.trim(), failed: false });
+          this.logSession(text, llmOut.trim());
           return { out: llmOut.trim() };
         }
       } catch (_) {

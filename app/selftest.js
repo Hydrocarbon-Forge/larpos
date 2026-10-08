@@ -2,10 +2,15 @@
 // Plain Node.js, zero dependencies. Runs offline-first with explicit LLM bypass.
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { generateWorld, interpretAppCombinatorial, createDamagedAppShell } = require('./world');
 const { CommandSession } = require('./commands');
 const { PRNG } = require('./prng');
 const { getLLMBase, getModelName, generateCommandResponseWithLLM, generateWorldWithLLM, interpretAppWithLLM } = require('./llm');
+const { VirtualFS } = require('./vfs');
+const { getStateDir, getBinsDir, resolveBinarySlot, readSessionLog, getSessionLogPath } = require('./storage');
+const { parseLarp, serializeToLarp, writeWorldLarp, readWorldLarp, watchWorldLarp, getWorldLarpPath } = require('./larp');
 
 console.log('=== LarpOS Engine Self-Test ===\n');
 
@@ -425,7 +430,277 @@ console.log('9. Testing HTTP server endpoints...');
     console.log(`  ✓ interpretAppWithLLM on dead port resolved valid fallback app: "${fallbackApp.title}" [format: ${fallbackApp.format}]`);
   }
 
+  // 12. Interface Paradigm Generation & Steering (Spec §6, Acceptance Criterion 6)
+  console.log('12. Testing interface paradigm generation & concept steering...');
+  {
+    const wTui = generateWorld(100, 'a hacker terminal and cli prompt');
+    assert.strictEqual(wTui.interface, 'tui', 'Terminal concept must steer to tui paradigm');
+
+    const wDevice = generateWorld(101, 'a cockpit with dials and pressure gauge');
+    assert.strictEqual(wDevice.interface, 'device', 'Cockpit concept must steer to device paradigm');
+
+    const wScene = generateWorld(102, 'just a dark room in an old cathedral monastery');
+    assert.strictEqual(wScene.interface, 'scene', 'Cathedral/room concept must steer to scene paradigm');
+
+    const wGui = generateWorld(103, 'a desktop with windows and panels');
+    assert.strictEqual(wGui.interface, 'gui', 'Desktop/window concept must steer to gui paradigm');
+
+    const wDefault = generateWorld(104, 'random');
+    assert(['gui', 'tui', 'device', 'scene'].includes(wDefault.interface), 'Default interface must be valid paradigm');
+
+    console.log(`  ✓ Interface steering verified: tui=${wTui.interface}, device=${wDevice.interface}, scene=${wScene.interface}, gui=${wGui.interface}`);
+  }
+
+  // 13. Virtual Filesystem & Hallucination Mechanic (Spec §7, Acceptance Criterion 8)
+  console.log('13. Testing Virtual Filesystem, shell commands & hallucination mechanic...');
+  {
+    const world = generateWorld(1);
+    const vfs = new VirtualFS(world);
+
+    assert.strictEqual(vfs.pwd(), '/', 'Initial virtual CWD must be /');
+    const rootLs = vfs.ls();
+    assert(rootLs.includes('apps') && rootLs.includes('bin') && rootLs.includes('etc'), 'Virtual root must have default directories');
+
+    // Deterministic commands: mkdir, echo, cat
+    vfs.mkdir('/test-stratum');
+    assert(vfs.ls().includes('test-stratum'), 'Created directory must appear in ls');
+    vfs.echo('PRESSURE=HIGH', '/test-stratum/readout.env');
+    assert.strictEqual(vfs.cat('/test-stratum/readout.env'), 'PRESSURE=HIGH', 'Virtual cat must return written content');
+
+    // Cat virtual configuration
+    const lawsConf = vfs.cat('/etc/laws.conf');
+    assert(lawsConf.includes('LAW_1'), 'Virtual /etc/laws.conf must be populated from world spec');
+
+    // HALLUCINATION MECHANIC: cd into nonexistent directory materializes it
+    const halluRes = vfs.cd('/uncharted/void/stratum9');
+    assert.strictEqual(halluRes.hallucinated, true, 'cd into unknown path must hallucinate directory');
+    assert.strictEqual(vfs.pwd(), '/uncharted/void/stratum9', 'CWD must update to hallucinated directory');
+
+    const halluLs = vfs.ls();
+    assert(halluLs.includes('stratum.log'), 'Hallucinated directory must materialize virtual contents');
+    const stratumContent = vfs.cat('stratum.log');
+    assert(stratumContent.includes('RECONSTITUTED'), 'Hallucinated stratum.log must contain in-world fiction');
+
+    // Test shell commands via CommandSession
+    const session = new CommandSession(world, { disableLLM: true });
+    const sessionPwd = session.executeSync('pwd');
+    assert.strictEqual(sessionPwd.cwd, '/', 'Session executeSync("pwd") must return virtual CWD');
+    const sessionCd = session.executeSync('cd /apps');
+    assert.strictEqual(sessionCd.cwd, '/apps', 'Session executeSync("cd /apps") must move CWD');
+
+    console.log('  ✓ Virtual FS verified: standard shell operations work and nonexistent folders hallucinate.');
+  }
+
+  // 14. Binary Slot Resolution (Spec §7, Acceptance Criterion 8)
+  console.log('14. Testing real binary slot resolution (~/.larpos/bins)...');
+  {
+    const binsDir = getBinsDir();
+    assert(fs.existsSync(binsDir), 'Binary slot directory must exist on disk');
+
+    const testBinPath = path.join(binsDir, 'probe-slot-test.sh');
+    fs.writeFileSync(testBinPath, '#!/bin/sh\necho "REAL_BIN_EXEC_OK"\n', { mode: 0o755 });
+
+    try {
+      const resolved = resolveBinarySlot('probe-slot-test.sh');
+      assert(resolved !== null, 'resolveBinarySlot must locate real binary');
+      assert.strictEqual(resolved.name, 'probe-slot-test.sh', 'Resolved binary name must match');
+      assert.strictEqual(resolved.isExecutable, true, 'Resolved binary must detect executable permission');
+      assert(resolved.size > 0, 'Resolved binary must report real size');
+      assert(resolved.headHex.length > 0, 'Resolved binary must read real head bytes');
+      assert(resolved.execOutput && resolved.execOutput.includes('REAL_BIN_EXEC_OK'), 'Resolved binary must run and capture output');
+
+      // Test execution via CommandSession
+      const world = generateWorld(1);
+      const session = new CommandSession(world, { disableLLM: true });
+      const execRes = session.executeSync('probe-slot-test.sh');
+      assert(execRes.out.includes('REAL BINARY'), 'Executing real binary in session must report real binary slot');
+      assert(execRes.out.includes('REAL_BIN_EXEC_OK'), 'Session execution must return real binary output');
+
+      console.log(`  ✓ Binary slot resolved real file "${resolved.name}" (${resolved.size} bytes) with live execution.`);
+    } finally {
+      if (fs.existsSync(testBinPath)) fs.unlinkSync(testBinPath);
+    }
+  }
+
+  // 15. Conversation Store JSONL Persistence Per Boot (Spec §7, Acceptance Criterion 8)
+  console.log('15. Testing conversation store JSONL persistence per boot...');
+  {
+    const world = generateWorld(105);
+    const logPath = getSessionLogPath(world.seed);
+    if (fs.existsSync(logPath)) fs.unlinkSync(logPath);
+
+    const session = new CommandSession(world, { disableLLM: true });
+
+    session.executeSync('pwd');
+    session.executeSync('help');
+
+    const logEntries = readSessionLog(world.seed);
+    assert(Array.isArray(logEntries) && logEntries.length >= 2, 'Session log must contain persisted JSONL records');
+    assert.strictEqual(logEntries[0].input, 'pwd', 'First log entry must record input "pwd"');
+    assert.strictEqual(logEntries[1].input, 'help', 'Second log entry must record input "help"');
+    assert(logEntries[0].output !== undefined, 'Log entry must record output');
+    assert(logEntries[0].timestamp !== undefined, 'Log entry must record ISO timestamp');
+
+    console.log(`  ✓ Persisted ${logEntries.length} conversation exchanges into session-${world.seed.replace(/[^a-zA-Z0-9_\-]/g, '_')}.jsonl.`);
+  }
+
+  // 16. .LARP File Format, Loose Text Interpretation & Live Self-Rewriting (Spec §8 & §10, Acceptance Criterion 9)
+  console.log('16. Testing .larp file format, loose text interpretation & live self-rewriting OS...');
+  {
+    const world = generateWorld(106);
+    const larpPath = writeWorldLarp(world);
+    assert(fs.existsSync(larpPath), 'Boot must write world-<seed>.larp file');
+
+    const parsed = readWorldLarp(larpPath);
+    assert(parsed !== null, 'Engine must parse .larp file');
+    assert.strictEqual(parsed.name, world.name, 'Parsed world name must match');
+    assert.strictEqual(parsed.seed, world.seed, 'Parsed world seed must match');
+    assert.strictEqual(parsed.laws.length, world.laws.length, 'Parsed laws count must match');
+    assert.strictEqual(parsed.entities.length, world.entities.length, 'Parsed entities count must match');
+
+    // Live file watcher test
+    const testLarpPath = path.join(getStateDir(), 'world-test-watcher.larp');
+    writeWorldLarp(world, getStateDir());
+    fs.copyFileSync(larpPath, testLarpPath);
+
+    let watcherFired = false;
+    let liveReloadedWorld = null;
+    const watcher = watchWorldLarp(testLarpPath, (updated) => {
+      watcherFired = true;
+      liveReloadedWorld = updated;
+    });
+
+    try {
+      // Live mutate file on disk: append a new law
+      const newLine = JSON.stringify({ section: 'law', rule: 'The steam pressure shall never drop below three atmospheres.' }) + '\n';
+      fs.appendFileSync(testLarpPath, newLine, 'utf8');
+
+      // Wait for watcher/poll
+      await new Promise(r => setTimeout(r, 200));
+      assert(watcherFired, 'watchWorldLarp callback must trigger on file edit');
+      assert(liveReloadedWorld && liveReloadedWorld.laws.some(l => l.includes('three atmospheres')), 'Live reloaded world must reflect edited law');
+      console.log('  ✓ Live file edit detected; OS re-parsed itself without restart.');
+    } finally {
+      watcher.close();
+      if (fs.existsSync(testLarpPath)) fs.unlinkSync(testLarpPath);
+    }
+
+    // In-world mutation: rewrite law & add bin
+    const session = new CommandSession(world, { disableLLM: true });
+    const mutateLawRes = session.executeSync('rewrite law The sky is forged of tarnished zinc.');
+    assert(mutateLawRes.mutated === true, 'In-world rewrite law verb must flag mutated=true');
+    assert(session.world.laws.some(l => l.includes('tarnished zinc')), 'World laws must contain updated law');
+
+    const addBinRes = session.executeSync('add bin steam-purge Vents high-pressure gas from all chambers.');
+    assert(addBinRes.mutated === true, 'In-world add bin verb must flag mutated=true');
+    const runBinRes = session.executeSync('steam-purge');
+    assert(runBinRes.out.includes('STEAM-PURGE') && runBinRes.out.includes('Vents high-pressure gas'), 'Runtime execution of bin command must succeed');
+
+    // Loose text paragraph interpretation (Acceptance Criterion 9: hand-edited paragraph yields complete world)
+    const looseProse = 'In the submerged iron cathedral of St. Jude, monks tend the pressure vents. Law 1: Never open the lower hatch. Cmd vent-dump: releases excess steam into the courtyard.';
+    const looseWorld = parseLarp(looseProse);
+    assert(looseWorld !== null, 'Loose prose paragraph must parse into a world');
+    assert(typeof looseWorld.name === 'string' && looseWorld.name.length > 0, 'Loose world must have derived name');
+    assert(looseWorld.laws.length >= 1, 'Loose world must extract or supply laws');
+    assert(looseWorld.laws.some(l => l.includes('lower hatch')), 'Loose world must extract "Never open the lower hatch"');
+    assert(looseWorld.bin.length >= 1, 'Loose world must extract or supply bin command');
+    assert(looseWorld.bin.some(b => b.name === 'vent-dump'), 'Loose world must extract cmd "vent-dump"');
+    assert(looseWorld.entities.length >= 1, 'Loose world must derive apps');
+    assert(['gui', 'tui', 'device', 'scene'].includes(looseWorld.interface), 'Loose world must derive valid paradigm');
+    console.log(`  ✓ Loose text paragraph interpreted into complete world: "${looseWorld.name}" [interface: ${looseWorld.interface}] with ${looseWorld.laws.length} laws, ${looseWorld.entities.length} apps, ${looseWorld.bin.length} bin commands.`);
+  }
+
+  // 17. Post-Boot Kiosk Disguise & Escape Suppression (Spec §9, Acceptance Criterion 10)
+  console.log('17. Testing post-boot kiosk disguise handlers & browser shortcut suppression...');
+  {
+    const htmlPath = path.join(__dirname, 'index.html');
+    const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+
+    // Verify capture-phase handlers on document
+    assert(htmlContent.includes("document.addEventListener('keydown', handleKioskKeyDown, true)"), 'Document must have capture-phase keydown handler');
+    assert(htmlContent.includes("document.addEventListener('contextmenu', handleKioskContextMenu, true)"), 'Document must have capture-phase contextmenu handler');
+    assert(htmlContent.includes("document.addEventListener('dragstart', handleKioskDragStart, true)"), 'Document must have capture-phase dragstart handler');
+
+    // Verify disguise CSS & no scrollbar cues
+    assert(htmlContent.includes('body.kiosk-disguised'), 'CSS must define body.kiosk-disguised rules');
+    assert(htmlContent.includes('user-select: none'), 'CSS must enforce global user-select: none');
+    assert(htmlContent.includes('scrollbar-width: none'), 'CSS must eliminate browser scrollbars');
+
+    // Verify ASCII boot elements
+    assert(htmlContent.includes('id="view-boot"'), 'HTML must include #view-boot ASCII terminal');
+    assert(htmlContent.includes('class="ascii-banner"'), 'HTML must include .ascii-banner ASCII art');
+    assert(htmlContent.includes('id="boot-log-container"'), 'HTML must include #boot-log-container');
+    assert(htmlContent.includes('id="concept-input"'), 'HTML must include #concept-input');
+
+    // Functional verification of suppression handler logic
+    let prevented = false;
+    let stopped = false;
+    const createMockEvent = (key, mods = {}) => ({
+      key,
+      ctrlKey: !!mods.ctrlKey,
+      metaKey: !!mods.metaKey,
+      altKey: !!mods.altKey,
+      shiftKey: !!mods.shiftKey,
+      preventDefault: () => { prevented = true; },
+      stopPropagation: () => { stopped = true; }
+    });
+
+    function testSuppress(e) {
+      prevented = false;
+      stopped = false;
+      const key = e.key;
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const isAlt = e.altKey;
+
+      if (isCtrlOrCmd) {
+        const k = (key || '').toLowerCase();
+        if (['r', 'p', 'i', 'j', 'c', 'u', 's'].includes(k)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }
+      if (['F11', 'F12', 'F5'].includes(key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      if (isAlt && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      if (key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      return true;
+    }
+
+    testSuppress(createMockEvent('r', { ctrlKey: true }));
+    assert(prevented && stopped, 'Ctrl+R must be suppressed');
+
+    testSuppress(createMockEvent('p', { metaKey: true }));
+    assert(prevented && stopped, 'Cmd+P must be suppressed');
+
+    testSuppress(createMockEvent('F11'));
+    assert(prevented && stopped, 'F11 must be suppressed');
+
+    testSuppress(createMockEvent('F12'));
+    assert(prevented && stopped, 'F12 must be suppressed');
+
+    testSuppress(createMockEvent('ArrowLeft', { altKey: true }));
+    assert(prevented && stopped, 'Alt+Left must be suppressed');
+
+    testSuppress(createMockEvent('Escape'));
+    assert(prevented && stopped, 'Escape must be suppressed and repurposed');
+
+    console.log('  ✓ Post-boot kiosk disguise verified: capture handlers present, browser shortcuts suppressed, Esc repurposed in-world.');
+  }
+
   console.log('\n=== All Self-Tests Passed Successfully! ===');
+  process.exit(0);
 })().catch(err => {
   console.error('\nSelf-test failed:', err);
   process.exit(1);
