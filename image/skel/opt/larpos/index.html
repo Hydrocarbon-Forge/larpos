@@ -1145,11 +1145,70 @@
       switchView('boot');
     }
 
+    let bgWorldPollTimer = null;
+    let bgWorldStatusEl = null;
+    let bgWorldPollStart = Date.now();
+
+    async function pollInitialWorld() {
+      try {
+        const res = await fetch('/api/world');
+        if (res.status === 200) {
+          const data = await res.json();
+          if (data && !data.booting) {
+            if (bgWorldPollTimer) {
+              clearInterval(bgWorldPollTimer);
+              bgWorldPollTimer = null;
+            }
+            if (bgWorldStatusEl) {
+              bgWorldStatusEl.textContent = `[ONLINE] Reality matrix ready: "${data.name}".`;
+              bgWorldStatusEl.style.color = '#38ef7d';
+            }
+            return;
+          }
+        }
+
+        // World is still generating (202 or booting: true)
+        if (!bgWorldStatusEl) {
+          bgWorldStatusEl = document.createElement('div');
+          bgWorldStatusEl.className = 'boot-log-line';
+          bgWorldStatusEl.style.color = '#e07a5f';
+          bgWorldStatusEl.textContent = '[BOOT] Reality substrate is generating in background...';
+          dom.bootLogContainer.appendChild(bgWorldStatusEl);
+        } else {
+          const elapsed = Math.round((Date.now() - bgWorldPollStart) / 1000);
+          bgWorldStatusEl.textContent = `[BOOT] Reality substrate is generating in background (${elapsed}s)...`;
+        }
+
+        if (Date.now() - bgWorldPollStart > 60000) {
+          if (bgWorldPollTimer) {
+            clearInterval(bgWorldPollTimer);
+            bgWorldPollTimer = null;
+          }
+        }
+      } catch (_) {
+        // Server network connection still pending
+      }
+    }
+
     async function bootWithConcept(conceptText) {
+      if (bgWorldPollTimer) {
+        clearInterval(bgWorldPollTimer);
+        bgWorldPollTimer = null;
+      }
+
       const line = document.createElement('div');
       line.className = 'boot-log-line';
       line.textContent = `[BOOT] Intent seed confirmed: "${conceptText || 'random'}". Seeding reality...`;
       dom.bootLogContainer.appendChild(line);
+
+      const statusLine = document.createElement('div');
+      statusLine.className = 'boot-log-line';
+      statusLine.style.color = '#4ecdc4';
+      statusLine.textContent = '[BOOT] Generating reality matrix...';
+      dom.bootLogContainer.appendChild(statusLine);
+
+      const bootStart = Date.now();
+      const bootTimeout = 60000;
 
       try {
         const res = await fetch('/api/boot', {
@@ -1157,17 +1216,40 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ concept: conceptText || 'random' })
         });
-        const worldData = await res.json();
-        renderWorld(worldData);
-        activateKioskDisguise();
-        switchView('overview');
+
+        if (res.status === 200) {
+          const worldData = await res.json();
+          renderWorld(worldData);
+          activateKioskDisguise();
+          switchView('overview');
+          return;
+        }
+
+        // If 202 or pending returned, poll /api/world until 200
+        while (Date.now() - bootStart < bootTimeout) {
+          await new Promise(r => setTimeout(r, 1000));
+          const elapsed = Math.round((Date.now() - bootStart) / 1000);
+          statusLine.textContent = `[BOOT] Generating reality matrix (${elapsed}s)...`;
+
+          try {
+            const pollRes = await fetch('/api/world');
+            if (pollRes.status === 200) {
+              const pollData = await pollRes.json();
+              if (pollData && !pollData.booting) {
+                renderWorld(pollData);
+                activateKioskDisguise();
+                switchView('overview');
+                return;
+              }
+            }
+          } catch (_) {}
+        }
+
+        throw new Error('Reality generation timed out after 60s');
       } catch (err) {
         console.error(err);
-        const errLine = document.createElement('div');
-        errLine.className = 'boot-log-line';
-        errLine.style.color = '#ff4d4d';
-        errLine.textContent = '[FAIL] Reality initialization error: ' + err.message;
-        dom.bootLogContainer.appendChild(errLine);
+        statusLine.style.color = '#ff4d4d';
+        statusLine.textContent = '[FAIL] Reality initialization error: ' + err.message;
       }
     }
 
@@ -1548,6 +1630,8 @@
 
     // Start on ASCII Boot Screen
     switchView('boot');
+    pollInitialWorld();
+    bgWorldPollTimer = setInterval(pollInitialWorld, 1500);
   </script>
 </body>
 </html>

@@ -46,11 +46,11 @@ addgroup kiosk input 2>/dev/null || true
 mkdir -p /opt/larpos/frontend
 mkdir -p /var/larpos/state /var/larpos/bins
 mkdir -p /var/log
-touch /var/log/larpos-cage.log
+touch /var/log/larpos-cage.log /var/log/larpos-server.log
 
 chown -R kiosk:kiosk /opt/larpos /var/larpos
-chown kiosk:kiosk /var/log/larpos-cage.log
-chmod 0664 /var/log/larpos-cage.log
+chown kiosk:kiosk /var/log/larpos-cage.log /var/log/larpos-server.log
+chmod 0664 /var/log/larpos-cage.log /var/log/larpos-server.log
 
 # Ensure display diagnostic utility is executable
 chmod +x /usr/sbin/larpos-display-check 2>/dev/null || true
@@ -83,10 +83,25 @@ if [ -S /run/seatd.sock ]; then
 fi
 
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    # Start your Node.js backend if present
+    # Start Node.js backend with logging
     if [ -f /opt/larpos/server.js ]; then
-        node /opt/larpos/server.js &
-        sleep 1
+        node /opt/larpos/server.js >> /var/log/larpos-server.log 2>&1 &
+
+        # Readiness loop: poll http://127.0.0.1:8080/ up to ~90s
+        echo "Waiting for LarpOS server on http://127.0.0.1:8080/..."
+        SERVER_READY=0
+        for i in $(seq 1 90); do
+            if wget -q -O /dev/null http://127.0.0.1:8080/ 2>/dev/null || \
+               node -e 'fetch("http://127.0.0.1:8080/").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))' 2>/dev/null; then
+                SERVER_READY=1
+                echo "LarpOS server is online (ready after ${i}s)."
+                break
+            fi
+            sleep 1
+        done
+        if [ "$SERVER_READY" -ne 1 ]; then
+            echo "Warning: LarpOS server did not respond within 90s. Check /var/log/larpos-server.log."
+        fi
     fi
 
     CAGE_LOG="/var/log/larpos-cage.log"

@@ -719,6 +719,76 @@ console.log('9. Testing HTTP server endpoints...');
     console.log('  ✓ Post-boot kiosk disguise verified: capture handlers present, browser shortcuts suppressed, Esc repurposed in-world.');
   }
 
+  // 18. Immediate HTTP Port Bind (<2s) while World Generation is Pending
+  console.log('18. Testing immediate HTTP port bind (<2s) while async world generation is pending...');
+  {
+    const http = require('http');
+    const { createServer } = require('./server');
+
+    const startTime = Date.now();
+    let slowResolved = false;
+    const slowWorldPromise = new Promise(resolve => {
+      setTimeout(() => {
+        slowResolved = true;
+        resolve(generateWorld(999, 'clockwork slow'));
+      }, 2500); // 2.5s simulated slow world generation delay
+    });
+
+    const testPort = 18080;
+    const { server, close } = createServer(999, testPort, {
+      disableLLM: true,
+      worldPromise: slowWorldPromise
+    });
+
+    function testHttp(method, path) {
+      return new Promise((resolve, reject) => {
+        const req = http.request(`http://127.0.0.1:${testPort}${path}`, { method, timeout: 2000 }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+    }
+
+    try {
+      await new Promise((resolve, reject) => {
+        server.listen(testPort, '127.0.0.1', () => resolve());
+        server.on('error', reject);
+      });
+
+      const bindDuration = Date.now() - startTime;
+      assert(bindDuration < 2000, `Server port must bind within 2s (bound in ${bindDuration}ms)`);
+
+      // 1. GET / must return 200 index.html immediately while world generation is still pending
+      const resRoot = await testHttp('GET', '/');
+      assert.strictEqual(resRoot.status, 200, 'GET / must return 200 immediately');
+      assert(resRoot.body.includes('LarpOS'), 'GET / must serve index.html');
+
+      // 2. GET /api/world must return 202 booting:true while world generation is still pending
+      const resApiPending = await testHttp('GET', '/api/world');
+      assert.strictEqual(resApiPending.status, 202, 'GET /api/world must return 202 while world gen is pending');
+      const pendingJson = JSON.parse(resApiPending.body);
+      assert.strictEqual(pendingJson.booting, true, 'GET /api/world must return { booting: true }');
+
+      // 3. Wait for slow world generation promise to resolve
+      await slowWorldPromise;
+      await new Promise(r => setTimeout(r, 60)); // allow tick for setupWorld
+
+      // 4. Now GET /api/world must return 200 with the completed world
+      const resApiReady = await testHttp('GET', '/api/world');
+      assert.strictEqual(resApiReady.status, 200, 'GET /api/world must return 200 once world gen completes');
+      const readyJson = JSON.parse(resApiReady.body);
+      assert.strictEqual(readyJson.seed, '0x000003e7', 'World seed must match');
+      assert(readyJson.name, 'World must have a name');
+
+      console.log(`  ✓ Port bound in ${bindDuration}ms (<2s); served index.html (200) and pending status (202), then resolved to ready (200).`);
+    } finally {
+      close();
+    }
+  }
+
   console.log('\n=== All Self-Tests Passed Successfully! ===');
   process.exit(0);
 })().catch(err => {

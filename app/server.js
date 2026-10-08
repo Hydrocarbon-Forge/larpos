@@ -40,6 +40,7 @@ function parseCliArgs() {
 }
 
 function serializeWorld(world) {
+  if (!world) return null;
   return {
     name: world.name,
     theme: world.theme,
@@ -73,38 +74,74 @@ function createServer(initialSeed, port = 8080, options = {}) {
   const disableLLM = !!options.disableLLM;
   const llmBase = options.llmBase || getLLMBase();
 
-  // Baseline fallback world
-  let activeWorld = options.initialWorld || generateWorld(initialSeed, options.concept);
-
-  // Write .larp file at boot and re-parse as source of truth
-  let activeLarpPath = writeWorldLarp(activeWorld);
-  const parsedFromLarp = readWorldLarpSync(activeLarpPath);
-  if (parsedFromLarp) {
-    activeWorld = parsedFromLarp;
-  }
-
+  let activeWorld = options.initialWorld || null;
+  let isWorldReady = !!activeWorld;
+  let activeLarpPath = null;
   let larpWatcher = null;
+  let session = null;
+
   const setupWatcher = (filePath) => {
     if (larpWatcher) larpWatcher.close();
     larpWatcher = watchWorldLarp(filePath, (updatedWorld) => {
       activeWorld = updatedWorld;
-      session.setWorld(updatedWorld);
+      if (session) session.setWorld(updatedWorld);
       console.log(`[LarpOS] Live reloaded active world from ${filePath}: "${updatedWorld.name}"`);
     }, { disableLLM, llmBase });
   };
 
-  setupWatcher(activeLarpPath);
+  const setupWorld = (world) => {
+    if (!world) return;
+    activeWorld = world;
+    isWorldReady = true;
 
-  const session = new CommandSession(activeWorld, {
-    disableLLM,
-    llmBase,
-    onReseed: (newWorld) => {
-      activeWorld = newWorld;
-      activeLarpPath = writeWorldLarp(newWorld);
-      setupWatcher(activeLarpPath);
-      console.log(`[LarpOS] Reality reseeded: "${activeWorld.name}" (${activeWorld.seed}) [${activeWorld.isLLM ? 'LLM' : 'combinatorial'}]`);
+    try {
+      activeLarpPath = writeWorldLarp(world);
+      const parsedFromLarp = readWorldLarpSync(activeLarpPath);
+      if (parsedFromLarp) {
+        activeWorld = parsedFromLarp;
+      }
+    } catch (_) {}
+
+    if (!session) {
+      session = new CommandSession(activeWorld, {
+        disableLLM,
+        llmBase,
+        onReseed: (newWorld) => {
+          setupWorld(newWorld);
+          console.log(`[LarpOS] Reality reseeded: "${activeWorld.name}" (${activeWorld.seed}) [${activeWorld.isLLM ? 'LLM' : 'combinatorial'}]`);
+        }
+      });
+    } else {
+      session.setWorld(activeWorld);
     }
-  });
+
+    if (activeLarpPath) {
+      setupWatcher(activeLarpPath);
+    }
+  };
+
+  // 1. Initial world or background promise setup
+  if (options.initialWorld) {
+    setupWorld(options.initialWorld);
+  } else if (options.worldPromise) {
+    options.worldPromise.then(world => {
+      setupWorld(world);
+    }).catch(err => {
+      console.error('[LarpOS] Background world generation error, using fallback:', err);
+      setupWorld(generateWorld(initialSeed, options.concept));
+    });
+  } else if (!options.pendingWorldGen && !options.delayWorldGenMs) {
+    // Synchronous fallback
+    setupWorld(generateWorld(initialSeed, options.concept));
+  }
+
+  // Support injected slow world-gen delay for automated testing
+  if (options.delayWorldGenMs) {
+    setTimeout(() => {
+      const generated = options.worldGenFactory ? options.worldGenFactory() : generateWorld(initialSeed, options.concept);
+      setupWorld(generated);
+    }, options.delayWorldGenMs);
+  }
 
   const htmlPath = path.join(__dirname, 'index.html');
 
@@ -122,6 +159,7 @@ function createServer(initialSeed, port = 8080, options = {}) {
       return;
     }
 
+    // Serve UI immediately regardless of background generation status
     if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
       fs.readFile(htmlPath, 'utf8', (err, content) => {
         if (err) {
@@ -138,7 +176,21 @@ function createServer(initialSeed, port = 8080, options = {}) {
       return;
     }
 
+    // World metadata endpoint: returns 200 when ready, 202 when still booting
     if (req.method === 'GET' && pathname === '/api/world') {
+      if (!isWorldReady || !activeWorld) {
+        res.writeHead(202, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify({
+          booting: true,
+          status: 'generating',
+          message: 'Reality matrix is materializing...'
+        }));
+        return;
+      }
+
       const publicWorld = serializeWorld(activeWorld);
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
@@ -181,12 +233,7 @@ function createServer(initialSeed, port = 8080, options = {}) {
           newWorld = generateWorld(seed, concept);
         }
 
-        activeWorld = newWorld;
-        activeLarpPath = writeWorldLarp(newWorld);
-        const parsed = await readWorldLarp(activeLarpPath, { disableLLM, llmBase });
-        if (parsed) activeWorld = parsed;
-        setupWatcher(activeLarpPath);
-        session.setWorld(activeWorld);
+        setupWorld(newWorld);
 
         const publicWorld = serializeWorld(activeWorld);
         res.writeHead(200, {
@@ -200,6 +247,15 @@ function createServer(initialSeed, port = 8080, options = {}) {
 
     // Live App Interpreter endpoint: POST /api/app/open or POST /api/interpret
     if (req.method === 'POST' && (pathname === '/api/app/open' || pathname === '/api/interpret')) {
+      if (!isWorldReady || !activeWorld) {
+        res.writeHead(202, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify({ booting: true, error: 'Reality matrix is materializing' }));
+        return;
+      }
+
       let body = '';
       req.on('data', chunk => {
         body += chunk;
@@ -229,9 +285,11 @@ function createServer(initialSeed, port = 8080, options = {}) {
         });
 
         // Track open app in session
-        const entity = activeWorld.entities.find(e => e.name === appScreen.entityName);
-        if (entity) {
-          session.currentApp = entity;
+        if (session) {
+          const entity = activeWorld.entities.find(e => e.name === appScreen.entityName);
+          if (entity) {
+            session.currentApp = entity;
+          }
         }
 
         res.writeHead(200, {
@@ -245,6 +303,15 @@ function createServer(initialSeed, port = 8080, options = {}) {
 
     // App interaction endpoint: POST /api/app/interact
     if (req.method === 'POST' && pathname === '/api/app/interact') {
+      if (!isWorldReady || !session || !activeWorld) {
+        res.writeHead(202, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify({ booting: true, error: 'Reality matrix is materializing' }));
+        return;
+      }
+
       let body = '';
       req.on('data', chunk => {
         body += chunk;
@@ -286,6 +353,18 @@ function createServer(initialSeed, port = 8080, options = {}) {
     }
 
     if (req.method === 'POST' && pathname === '/api/command') {
+      if (!isWorldReady || !session || !activeWorld) {
+        res.writeHead(202, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify({
+          booting: true,
+          out: '[BOOTING] Reality substrate is materializing... Please wait.'
+        }));
+        return;
+      }
+
       let body = '';
       req.on('data', chunk => {
         body += chunk;
@@ -354,13 +433,12 @@ function createServer(initialSeed, port = 8080, options = {}) {
 
   return {
     server,
-    session,
+    getSession: () => session,
+    get session() { return session; },
     getWorld: () => activeWorld,
+    isReady: () => isWorldReady,
     getActiveLarpPath: () => activeLarpPath,
-    setWorld: (w) => {
-      activeWorld = w;
-      session.setWorld(w);
-    },
+    setWorld: (w) => setupWorld(w),
     close: () => {
       if (larpWatcher) larpWatcher.close();
       server.close();
@@ -372,50 +450,91 @@ async function createServerAsync(initialSeed, port = 8080, options = {}) {
   const disableLLM = !!options.disableLLM || process.env.LLM_DISABLED === '1';
   const llmBase = options.llmBase || getLLMBase();
 
-  let initialWorld = null;
-  if (!disableLLM) {
-    try {
-      initialWorld = await generateWorldWithLLM(initialSeed, {
-        concept: options.concept,
-        llmBase,
-        timeout: 25000
-      });
-      if (initialWorld) {
-        console.log(`[LarpOS] Generated initial world via local LLM at ${llmBase}`);
-      }
-    } catch (_) {
-      // Fallback
+  const worldPromise = (async () => {
+    let initialWorld = null;
+    if (!disableLLM) {
+      try {
+        initialWorld = await generateWorldWithLLM(initialSeed, {
+          concept: options.concept,
+          llmBase,
+          timeout: 25000
+        });
+      } catch (_) {}
     }
-  }
+    if (!initialWorld) {
+      initialWorld = generateWorld(initialSeed, options.concept);
+    }
+    return initialWorld;
+  })();
 
-  if (!initialWorld) {
-    initialWorld = generateWorld(initialSeed, options.concept);
-  }
-
-  return createServer(initialSeed, port, {
+  const app = createServer(initialSeed, port, {
     ...options,
     disableLLM,
     llmBase,
-    initialWorld
+    worldPromise
   });
+
+  return app;
 }
 
 if (require.main === module) {
   const { seed, port, disableLLM, llmBase } = parseCliArgs();
 
-  (async () => {
-    console.log(`[LarpOS] Booting system... (LLM API: ${disableLLM ? 'DISABLED' : llmBase})`);
-    const app = await createServerAsync(seed, port, { disableLLM, llmBase });
+  console.log(`[LarpOS] Starting system on port ${port}...`);
 
-    app.server.listen(port, '0.0.0.0', () => {
-      const world = app.getWorld();
-      console.log(`[LarpOS] World Engine online at http://0.0.0.0:${port}/`);
-      console.log(`[LarpOS] Active Reality: "${world.name}" [source: ${world.isLLM ? 'LLM' : 'combinatorial'}]`);
-      console.log(`[LarpOS] Concept: "${world.concept}"`);
-      console.log(`[LarpOS] Seed: ${world.seed}`);
-      console.log(`[LarpOS] Resident Keeper: ${world.keeper.name}`);
-    });
+  // 1. Non-blocking startup probe (3s timeout) logged to /var/log/larpos-server.log
+  if (!disableLLM && process.env.LLM_DISABLED !== '1') {
+    (async () => {
+      try {
+        const { getModelName } = require('./llm');
+        const model = await getModelName(llmBase, 3000);
+        if (model) {
+          console.log(`[LarpOS] Local LLM probe at ${llmBase}: reachable (model: ${model})`);
+        } else {
+          console.log(`[LarpOS] Local LLM probe at ${llmBase}: unreachable (combinatorial fallback active)`);
+        }
+      } catch (_) {
+        console.log(`[LarpOS] Local LLM probe at ${llmBase}: unreachable (combinatorial fallback active)`);
+      }
+    })();
+  } else {
+    console.log(`[LarpOS] Local LLM disabled; combinatorial fallback active.`);
+  }
+
+  // 2. Start background world generation promise (non-blocking)
+  const worldPromise = (async () => {
+    let world = null;
+    if (!disableLLM && process.env.LLM_DISABLED !== '1') {
+      try {
+        world = await generateWorldWithLLM(seed, { llmBase, timeout: 25000 });
+      } catch (_) {}
+    }
+    if (!world) {
+      world = generateWorld(seed);
+    }
+    return world;
   })();
+
+  // 3. Create server wired with background worldPromise
+  const app = createServer(seed, port, {
+    disableLLM,
+    llmBase,
+    worldPromise
+  });
+
+  // 4. BIND HTTP PORT FIRST (listen immediately before async world generation finishes)
+  app.server.listen(port, '0.0.0.0', () => {
+    console.log(`[LarpOS] World Engine online at http://0.0.0.0:${port}/ (port bound, accepting connections)`);
+  });
+
+  worldPromise.then((world) => {
+    console.log(`[LarpOS] Active Reality: "${world.name}" [source: ${world.isLLM ? 'LLM' : 'combinatorial'}]`);
+    console.log(`[LarpOS] Concept: "${world.concept}"`);
+    console.log(`[LarpOS] Seed: ${world.seed}`);
+    console.log(`[LarpOS] Resident Keeper: ${world.keeper ? world.keeper.name : 'Unknown'}`);
+  }).catch((err) => {
+    console.error(`[LarpOS] Initial world generation warning:`, err);
+  });
 }
 
 module.exports = {
