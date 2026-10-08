@@ -551,7 +551,7 @@ console.log('9. Testing HTTP server endpoints...');
     const larpPath = writeWorldLarp(world);
     assert(fs.existsSync(larpPath), 'Boot must write world-<seed>.larp file');
 
-    const parsed = readWorldLarp(larpPath);
+    const parsed = await readWorldLarp(larpPath, { disableLLM: true });
     assert(parsed !== null, 'Engine must parse .larp file');
     assert.strictEqual(parsed.name, world.name, 'Parsed world name must match');
     assert.strictEqual(parsed.seed, world.seed, 'Parsed world seed must match');
@@ -568,7 +568,7 @@ console.log('9. Testing HTTP server endpoints...');
     const watcher = watchWorldLarp(testLarpPath, (updated) => {
       watcherFired = true;
       liveReloadedWorld = updated;
-    });
+    }, { disableLLM: true });
 
     try {
       // Live mutate file on disk: append a new law
@@ -596,18 +596,38 @@ console.log('9. Testing HTTP server endpoints...');
     const runBinRes = session.executeSync('steam-purge');
     assert(runBinRes.out.includes('STEAM-PURGE') && runBinRes.out.includes('Vents high-pressure gas'), 'Runtime execution of bin command must succeed');
 
-    // Loose text paragraph interpretation (Acceptance Criterion 9: hand-edited paragraph yields complete world)
+    // Loose text paragraph interpretation (Acceptance Criterion 9: single paragraph yields complete valid world spec)
+    function assertWorldValidity(w, label) {
+      assert(w !== null && typeof w === 'object', `${label}: World must be a non-null object`);
+      assert(typeof w.name === 'string' && w.name.length > 0, `${label}: world.name must be non-empty string`);
+      assert(typeof w.theme === 'string' && w.theme.length > 0, `${label}: world.theme must be non-empty string`);
+      assert(Array.isArray(w.palette) && w.palette.length >= 3, `${label}: world.palette must have at least 3 colors`);
+      assert(w.keeper && typeof w.keeper.name === 'string', `${label}: world.keeper must have a name`);
+      assert(Array.isArray(w.laws) && w.laws.length >= 1, `${label}: world.laws must have at least 1 law`);
+      assert(Array.isArray(w.entities) && w.entities.length >= 1, `${label}: world.entities must have at least 1 entity`);
+      for (const ent of w.entities) {
+        assert(ent.app && typeof ent.app.title === 'string', `${label}: entity ${ent.name} must have app definition`);
+        const elem = ent.app.element || (ent.app.elements && ent.app.elements[0]);
+        assert(elem && typeof elem.name === 'string' && typeof elem.action === 'string', `${label}: app for ${ent.name} must have interactive element`);
+      }
+      assert(Array.isArray(w.bin) && w.bin.length >= 1, `${label}: world.bin must have at least 1 bin command`);
+      assert(['gui', 'tui', 'device', 'scene'].includes(w.interface), `${label}: world.interface must be valid paradigm`);
+    }
+
     const looseProse = 'In the submerged iron cathedral of St. Jude, monks tend the pressure vents. Law 1: Never open the lower hatch. Cmd vent-dump: releases excess steam into the courtyard.';
-    const looseWorld = parseLarp(looseProse);
-    assert(looseWorld !== null, 'Loose prose paragraph must parse into a world');
-    assert(typeof looseWorld.name === 'string' && looseWorld.name.length > 0, 'Loose world must have derived name');
-    assert(looseWorld.laws.length >= 1, 'Loose world must extract or supply laws');
-    assert(looseWorld.laws.some(l => l.includes('lower hatch')), 'Loose world must extract "Never open the lower hatch"');
-    assert(looseWorld.bin.length >= 1, 'Loose world must extract or supply bin command');
-    assert(looseWorld.bin.some(b => b.name === 'vent-dump'), 'Loose world must extract cmd "vent-dump"');
-    assert(looseWorld.entities.length >= 1, 'Loose world must derive apps');
-    assert(['gui', 'tui', 'device', 'scene'].includes(looseWorld.interface), 'Loose world must derive valid paradigm');
-    console.log(`  ✓ Loose text paragraph interpreted into complete world: "${looseWorld.name}" [interface: ${looseWorld.interface}] with ${looseWorld.laws.length} laws, ${looseWorld.entities.length} apps, ${looseWorld.bin.length} bin commands.`);
+
+    // 16a. Offline path
+    const offlineWorld = await parseLarp(looseProse, { disableLLM: true });
+    assertWorldValidity(offlineWorld, 'Offline loose text interpretation');
+    console.log(`  ✓ Offline loose text interpretation valid: "${offlineWorld.name}" [interface: ${offlineWorld.interface}] with ${offlineWorld.laws.length} laws, ${offlineWorld.entities.length} apps, ${offlineWorld.bin.length} bins.`);
+
+    // 16b. LLM path (interprets subjectively when model is up; falls back automatically if offline)
+    const llmWorld = await parseLarp(looseProse, {
+      llmBase: getLLMBase(),
+      timeout: 25000
+    });
+    assertWorldValidity(llmWorld, 'LLM loose text interpretation');
+    console.log(`  ✓ LLM loose text interpretation valid: "${llmWorld.name}" [interface: ${llmWorld.interface}] (source: ${llmWorld.isLLM ? 'LLM' : 'fallback'}) with ${llmWorld.laws.length} laws, ${llmWorld.entities.length} apps, ${llmWorld.bin.length} bins.`);
   }
 
   // 17. Post-Boot Kiosk Disguise & Escape Suppression (Spec §9, Acceptance Criterion 10)

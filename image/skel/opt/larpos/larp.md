@@ -1,92 +1,42 @@
-# The `.larp` File Format Specification
+# The `.larp` File Format
 
-The `.larp` format defines the entire hallucinated operating system as a single, human-readable structured document.
+A `.larp` file is a **loose text document** that defines a LarpOS reality.
 
-The file format uses **JSON-lines (`.larp`)**, where each line represents a distinct system section.
-
----
-
-## File Structure
-
-A `.larp` document consists of top-level section lines:
-
-1. **`world`** — The global OS definition:
-   ```json
-   {
-     "section": "world",
-     "name": "PHAROS IX // THE GLASS REACHES",
-     "theme": "brine-crusted sounding pulpit perched over an ocean that has forgotten waves",
-     "concept": "submarine",
-     "interface": "device",
-     "palette": ["#09131b", "#0f2537", "#4ecdc4", "#cbe3db", "#e07a5f"],
-     "keeper": {
-       "name": "Maura of the Fog Signals",
-       "personality": "tarred shears tied to wrist; listens for drops in pressure",
-       "idiom": "foghorn resonance, barometer drops, and tallow grease",
-       "prefix": "Maura"
-     },
-     "seed": "0x00000065",
-     "openVerb": "unveil",
-     "homeVerb": "watch",
-     "helpVerb": "hail",
-     "reseedVerb": "cast"
-   }
-   ```
-
-2. **`law`** — System laws binding the reality:
-   ```json
-   {
-     "section": "law",
-     "rule": "The water depth increases by four fathoms whenever spoken into the brass funnel."
-   }
-   ```
-
-3. **`scene`** — Boot telemetry / monologue lines:
-   ```json
-   {
-     "section": "scene",
-     "line": "MAURA: \"Keep your boots off the brass pipe. The sea went hard three months ago.\""
-   }
-   ```
-
-4. **`app`** — Generated application script definitions:
-   ```json
-   {
-     "section": "app",
-     "name": "mercury-phial",
-     "title": "QUICKSILVER SOUNDING COLUMN",
-     "format": "gauge",
-     "kind": "sealed hydrographic column",
-     "desc": "A four-foot column of cold green glass encased in perforated brass.",
-     "reachVerbs": ["unseal", "listen", "strike"],
-     "screen": "The meniscus pulses at forty fathoms beneath blackened tallow markings.",
-     "element": {
-       "name": "quicksilver-petcock",
-       "label": "Bleed Hydrographic Petcock",
-       "type": "valve",
-       "state": "seated",
-       "action": "turn",
-       "responses": {
-         "turn": "Quicksilver surges upward: FORTY-ONE FATHOMS."
-       }
-     }
-   }
-   ```
-
-5. **`bin`** — Custom in-world commands executable in the shell:
-   ```json
-   {
-     "section": "bin",
-     "name": "sounding-ping",
-     "behavior": "Emits three acoustic pulses into the deep silt; returns depth reflection."
-   }
-   ```
+There is **no required schema** and **no rigid layout**. The point of `.larp` is that you can write *whatever* — from structured-looking sections to raw paragraphs, notes, or half-finished fragments — and the AI world engine interprets it into a running operating system.
 
 ---
 
-## Authoritative Source of Truth & Live Rewriting
+## Reader-Not-Validator Philosophy
 
-1. On boot, the world is written to `<state_dir>/world-<seed>.larp`.
-2. The world engine parses this file as the **authoritative source of truth**.
-3. The engine monitors `<state_dir>/world-<seed>.larp` using `fs.watch` and mtime polling. Any external edits (by human editor, keeper command, or another process) immediately re-parse and live-update the running operating system.
-4. **Interpretation Policy**: If a line is corrupt, garbled, or invalid JSON, the parser does not abort or throw. In accordance with the *reader-not-validator* policy, it interprets corrupt entries as uncanny in-world artifacts (e.g. damaged apparatus or glitched telemetry lines).
+The parser **is the interpreter**, not a regex or JSON-lines parser. The reader-not-validator policy applies to the file itself:
+
+1. **Loose text is native**: Hand-authored `.larp` files can be anything, including just a single paragraph of narrative prose.
+2. **Structure is optional and non-normative**: A file *may* use section labels, bullet points, or JSON-like blocks when convenient, but these are cues for the interpreter, not a schema contract.
+3. **Subjective interpretation**:
+   - A chunk of text that reads like an apparatus or machinery becomes an inhabited **app**.
+   - A command-like line or tool description becomes a **bin** command.
+   - A rule, warning, or operational constraint becomes a world **law**.
+   - Garbled, corrupted, or incoherent text is interpreted as in-world damage, glitched lore, or an uncanny artifact — **never a parse error**.
+4. **Nothing is rejected**: The interpreter never aborts, rejects, or throws on invalid syntax. It makes sense of whatever text it is handed.
+
+---
+
+## Generator Convenience vs. Format Contract
+
+When the LarpOS engine boots and generates a world, it writes an initial `.larp` document to `<state_dir>/world-<seed>.larp`.
+
+The generator writes this boot file with a readable, structured shape (with sections for world metadata, laws, apps, bin commands, and monologue scenes) because the generator knows what an operating system needs to function. **However, that structure is a generator convenience, not a format contract.**
+
+The engine reads this file through the AI interpreter as its **authoritative source of truth**.
+
+---
+
+## Live Rewriting & Dynamic Mutation
+
+The LarpOS engine watches the active `.larp` file (`fs.watch` with mtime polling fallback). When the file is edited on disk — by a human editor, by the resident keeper, or by an external tool:
+
+1. The file watcher detects the change.
+2. The AI interpreter reads the revised text and subjectively re-interprets it into the updated world spec.
+3. The running operating system changes shape live, without restarting the server or breaking kiosk state.
+
+In-world verbs (such as `rewrite law <text>` or `add bin <name> <behavior>`) also update the active `.larp` file directly, demonstrating a live self-rewriting operating system.

@@ -1,4 +1,3 @@
-const { writeWorldLarp } = require('./larp');
 // app/world.js — Coherent seeded world generator for LarpOS
 
 const { PRNG } = require('./prng');
@@ -2258,6 +2257,7 @@ function generateWorld(seedInput, conceptInput) {
   };
 
   try {
+    const { writeWorldLarp } = require('./larp');
     writeWorldLarp(world);
   } catch (_) {}
 

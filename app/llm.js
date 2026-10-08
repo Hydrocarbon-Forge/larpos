@@ -4,8 +4,13 @@
 
 const http = require('http');
 const { PRNG } = require('./prng');
-const { generateWorld, interpretAppCombinatorial, createDamagedAppShell } = require('./world');
-const { writeWorldLarp } = require('./larp');
+function getWorldModule() {
+  return require('./world');
+}
+
+function getLarpModule() {
+  return require('./larp');
+}
 
 function getLLMBase() {
   return process.env.LLM_BASE || 'http://192.168.1.72:8080';
@@ -155,7 +160,7 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     : 'random';
 
   // Always prepare deterministic fallback for the exact same seed & concept
-  const fallback = generateWorld(seedInput, concept);
+  const fallback = getWorldModule().generateWorld(seedInput, concept);
 
   if (options.disableLLM || process.env.LLM_DISABLED === '1') {
     return fallback;
@@ -395,7 +400,7 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     };
 
     try {
-      writeWorldLarp(world);
+      getLarpModule().writeWorldLarp(world);
     } catch (_) {}
 
     return world;
@@ -414,11 +419,11 @@ async function interpretAppWithLLM(world, entityQuery, options = {}) {
   ) : null) || (world && world.entities ? world.entities[0] : null);
 
   if (!entity) {
-    return createDamagedAppShell(world, entityQuery, 'Entity not found');
+    return getWorldModule().createDamagedAppShell(world, entityQuery, 'Entity not found');
   }
 
   // Combinatorial fallback for this app
-  const fallback = interpretAppCombinatorial(world, entity.name);
+  const fallback = getWorldModule().interpretAppCombinatorial(world, entity.name);
 
   if (options.disableLLM || process.env.LLM_DISABLED === '1') {
     return fallback;
@@ -498,7 +503,7 @@ async function interpretAppWithLLM(world, entityQuery, options = {}) {
 
     // If unparsable or empty, check if we need the damaged app shell fallback
     if (!parsed || !parsed.screen || !parsed.element || !parsed.element.name) {
-      return createDamagedAppShell(world, entity.name, rawOutput || '');
+      return getWorldModule().createDamagedAppShell(world, entity.name, rawOutput || '');
     }
 
     const elem = {

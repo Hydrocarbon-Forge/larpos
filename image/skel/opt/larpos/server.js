@@ -8,7 +8,7 @@ const path = require('path');
 const { generateWorld, interpretAppCombinatorial } = require('./world');
 const { CommandSession } = require('./commands');
 const { getLLMBase, generateWorldWithLLM, interpretAppWithLLM } = require('./llm');
-const { writeWorldLarp, readWorldLarp, watchWorldLarp, getWorldLarpPath } = require('./larp');
+const { writeWorldLarp, readWorldLarp, readWorldLarpSync, watchWorldLarp, getWorldLarpPath } = require('./larp');
 
 function parseCliArgs() {
   let seed = process.env.LARPOS_SEED;
@@ -78,7 +78,7 @@ function createServer(initialSeed, port = 8080, options = {}) {
 
   // Write .larp file at boot and re-parse as source of truth
   let activeLarpPath = writeWorldLarp(activeWorld);
-  const parsedFromLarp = readWorldLarp(activeLarpPath);
+  const parsedFromLarp = readWorldLarpSync(activeLarpPath);
   if (parsedFromLarp) {
     activeWorld = parsedFromLarp;
   }
@@ -90,7 +90,7 @@ function createServer(initialSeed, port = 8080, options = {}) {
       activeWorld = updatedWorld;
       session.setWorld(updatedWorld);
       console.log(`[LarpOS] Live reloaded active world from ${filePath}: "${updatedWorld.name}"`);
-    });
+    }, { disableLLM, llmBase });
   };
 
   setupWatcher(activeLarpPath);
@@ -183,7 +183,7 @@ function createServer(initialSeed, port = 8080, options = {}) {
 
         activeWorld = newWorld;
         activeLarpPath = writeWorldLarp(newWorld);
-        const parsed = readWorldLarp(activeLarpPath);
+        const parsed = await readWorldLarp(activeLarpPath, { disableLLM, llmBase });
         if (parsed) activeWorld = parsed;
         setupWatcher(activeLarpPath);
         session.setWorld(activeWorld);
