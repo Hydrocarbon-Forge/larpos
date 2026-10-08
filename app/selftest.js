@@ -5,7 +5,7 @@ const assert = require('assert');
 const { generateWorld } = require('./world');
 const { CommandSession } = require('./commands');
 const { PRNG } = require('./prng');
-const { getLLMBase, getModelName, generateCommandResponseWithLLM } = require('./llm');
+const { getLLMBase, getModelName, generateCommandResponseWithLLM, generateWorldWithLLM } = require('./llm');
 
 console.log('=== LarpOS Engine Self-Test ===\n');
 
@@ -265,6 +265,39 @@ console.log('8. Testing HTTP server endpoints (/, /api/world, /api/command)...')
     } else {
       console.log('  [NOTE] LLM did not return text within timeout; fallback logic active.');
     }
+  }
+
+  // 10. Automatic fallback on unreachable LLM_BASE (dead port mock)
+  console.log('10. Testing automatic combinatorial fallback on unreachable LLM_BASE (dead port)...');
+  {
+    const deadBase = 'http://127.0.0.1:59999';
+    const fallbackWorld = await generateWorldWithLLM(777, {
+      llmBase: deadBase,
+      timeout: 1000,
+      probeTimeout: 500
+    });
+
+    assert(fallbackWorld !== null, 'generateWorldWithLLM must NEVER resolve to null');
+    assert(typeof fallbackWorld === 'object', 'Fallback world must be an object');
+    assert(typeof fallbackWorld.name === 'string' && fallbackWorld.name.length > 0, 'Fallback world must have name');
+    assert(Array.isArray(fallbackWorld.palette) && fallbackWorld.palette.length >= 3, 'Fallback world must have palette array');
+    assert(fallbackWorld.keeper && typeof fallbackWorld.keeper.name === 'string', 'Fallback world must have keeper');
+    assert(Array.isArray(fallbackWorld.entities) && fallbackWorld.entities.length >= 4, 'Fallback world must have entities');
+    assert(Array.isArray(fallbackWorld.laws) && fallbackWorld.laws.length >= 2, 'Fallback world must have laws');
+    assert(Array.isArray(fallbackWorld.verbs) && fallbackWorld.verbs.length >= 5, 'Fallback world must have verbs');
+    assert(Array.isArray(fallbackWorld.script) && fallbackWorld.script.length >= 3, 'Fallback world must have script');
+    assert.strictEqual(fallbackWorld.seed, new PRNG(777).hexSeed, 'Fallback world must match seed 777');
+    console.log(`  ✓ generateWorldWithLLM on dead port resolved complete valid fallback world: "${fallbackWorld.name}" (${fallbackWorld.seed})`);
+
+    // Assert command response fallback on dead port
+    const fallbackCmd = await generateCommandResponseWithLLM(fallbackWorld, 'help', [], {
+      llmBase: deadBase,
+      timeout: 1000,
+      probeTimeout: 500
+    });
+    assert(fallbackCmd !== null && typeof fallbackCmd === 'string' && fallbackCmd.length > 0, 'Command response on dead port must never resolve to null');
+    assert(fallbackCmd.includes(fallbackWorld.keeper.prefix) || fallbackCmd.includes('OPERATIONAL VERBS'), 'Fallback command must contain in-character content');
+    console.log(`  ✓ generateCommandResponseWithLLM on dead port resolved valid fallback response:\n    "${fallbackCmd.slice(0, 80).replace(/\n/g, ' ')}..."`);
   }
 
   console.log('\n=== All Self-Tests Passed Successfully! ===');

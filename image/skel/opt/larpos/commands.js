@@ -294,7 +294,8 @@ class CommandSession {
       try {
         const llmOut = await generateCommandResponseWithLLM(this.world, text, this.history, {
           llmBase: this.llmBase,
-          timeout: 8000
+          timeout: 8000,
+          fallback: () => this.executeFallback(rawText).out
         });
 
         if (llmOut && typeof llmOut === 'string' && llmOut.trim().length > 0) {
