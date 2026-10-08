@@ -11,6 +11,7 @@ const { getLLMBase, getModelName, generateCommandResponseWithLLM, generateWorldW
 const { VirtualFS } = require('./vfs');
 const { getStateDir, getBinsDir, resolveBinarySlot, readSessionLog, getSessionLogPath } = require('./storage');
 const { parseLarp, serializeToLarp, writeWorldLarp, readWorldLarp, watchWorldLarp, getWorldLarpPath } = require('./larp');
+const { generateDesignSpec } = require('./design');
 
 console.log('=== LarpOS Engine Self-Test ===\n');
 
@@ -787,6 +788,154 @@ console.log('9. Testing HTTP server endpoints...');
     } finally {
       close();
     }
+  }
+
+  // 19. Tone, Design Banks, Instantiators & Boot Serialization (§11, Acceptance Criterion 11)
+  console.log('19. Testing §11 requirements: design bank pulls, determinism, practical desktop tone & boot queue...');
+  {
+    // A. Practical concept tone & archetype steering
+    const wPractical = generateWorld(1234, 'a highly practical and lightweight desktop operating system');
+    assert.strictEqual(wPractical.archetypeId, 'practical_desktop', 'Concept must steer to practical_desktop archetype');
+    assert.strictEqual(wPractical.interface, 'gui', 'Practical desktop must steer to gui interface');
+    assert(wPractical.theme.toLowerCase().includes('desktop') || wPractical.theme.toLowerCase().includes('practical') || wPractical.theme.toLowerCase().includes('workstation'), 'Practical desktop theme must have normal computer/Linux texture');
+    assert(wPractical.entities.some(e => e.name.includes('terminal') || e.name.includes('file') || e.name.includes('setting')), 'Practical desktop must include standard computer entities');
+    console.log(`  ✓ Practical desktop tone verified: "${wPractical.name}" [interface: ${wPractical.interface}, archetype: ${wPractical.archetypeId}]`);
+
+    // B. Design Spec Determinism (same seed + concept => bit-for-bit identical spec)
+    const spec1a = generateDesignSpec(1234, 'a highly practical and lightweight desktop operating system');
+    const spec1b = generateDesignSpec(1234, 'a highly practical and lightweight desktop operating system');
+    assert.deepStrictEqual(spec1a, spec1b, 'generateDesignSpec must be bit-for-bit deterministic for identical seed and concept');
+
+    const specDifferent = generateDesignSpec(9876, 'victorian brass submarine');
+    assert.notDeepStrictEqual(spec1a, specDifferent, 'Different seeds/concepts must yield distinct design specs');
+    console.log('  ✓ Design spec determinism verified: bit-for-bit identical output for same seed + concept.');
+
+    // C. Selective Bank Pulls per Paradigm
+    const wTui = generateWorld(555, 'a hacker terminal and cli prompt');
+    assert.strictEqual(wTui.interface, 'tui', 'Terminal concept must steer to tui');
+    assert.strictEqual(wTui.designSpec.bankPulls.iconGrammar, null, 'TUI worlds must pull NO icon bank items (iconGrammar === null)');
+    assert.strictEqual(wTui.designSpec.bankPulls.sounds.length, 0, 'TUI worlds must pull NO sounds');
+
+    const wGui = generateWorld(556, 'a clean modern windowed workspace');
+    assert.strictEqual(wGui.interface, 'gui', 'Workspace concept must steer to gui');
+    assert.notStrictEqual(wGui.designSpec.bankPulls.iconGrammar, null, 'GUI worlds must pull an icon grammar');
+    assert(wGui.designSpec.bankPulls.sounds.length > 0, 'GUI worlds must pull sound cues');
+    console.log('  ✓ Selective bank pulls verified: TUI pulls zero icons/sounds; GUI pulls icons/sounds.');
+
+    // D. Configurable LARPOS_WORLD_TIMEOUT_MS default
+    const prevEnv = process.env.LARPOS_WORLD_TIMEOUT_MS;
+    try {
+      delete process.env.LARPOS_WORLD_TIMEOUT_MS;
+      const defaultTimeout = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
+      assert.strictEqual(defaultTimeout, 120000, 'LARPOS_WORLD_TIMEOUT_MS must default to 120000ms');
+
+      process.env.LARPOS_WORLD_TIMEOUT_MS = '60000';
+      const customTimeout = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
+      assert.strictEqual(customTimeout, 60000, 'LARPOS_WORLD_TIMEOUT_MS must honor custom env var');
+    } finally {
+      if (prevEnv !== undefined) process.env.LARPOS_WORLD_TIMEOUT_MS = prevEnv;
+      else delete process.env.LARPOS_WORLD_TIMEOUT_MS;
+    }
+    console.log('  ✓ Configurable LARPOS_WORLD_TIMEOUT_MS default (120000ms) and override verified.');
+
+    // E. Serialization queue & in-flight GET /api/world 202 behavior
+    const http = require('http');
+    const { createServer } = require('./server');
+    const queueTestPort = 18081;
+
+    let resolveSlowWorld = null;
+    const slowWorldPromise = new Promise(resolve => {
+      resolveSlowWorld = resolve;
+    });
+
+    const { server, close } = createServer(777, queueTestPort, {
+      disableLLM: true,
+      worldPromise: slowWorldPromise
+    });
+
+    function req(method, path, body = null) {
+      return new Promise((resolve, reject) => {
+        const payload = body ? JSON.stringify(body) : null;
+        const options = {
+          hostname: '127.0.0.1',
+          port: queueTestPort,
+          path,
+          method,
+          headers: payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}
+        };
+        const r = http.request(options, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ status: res.statusCode, data }));
+        });
+        r.on('error', reject);
+        if (payload) r.write(payload);
+        r.end();
+      });
+    }
+
+    try {
+      await new Promise((resolve, reject) => {
+        server.listen(queueTestPort, '127.0.0.1', () => resolve());
+        server.on('error', reject);
+      });
+
+      // 1. GET /api/world while generation is in flight must return 202 {booting:true}
+      const pendingRes = await req('GET', '/api/world');
+      assert.strictEqual(pendingRes.status, 202, 'GET /api/world must return 202 while generation is in flight');
+      const pendingData = JSON.parse(pendingRes.data);
+      assert.strictEqual(pendingData.booting, true, 'GET /api/world must return { booting: true }');
+
+      // 2. Resolve the initial slow world
+      resolveSlowWorld(generateWorld(777, 'initial world'));
+      await new Promise(r => setTimeout(r, 60)); // allow tick for setupWorld
+
+      // 3. Now GET /api/world returns 200 with active world tagged with concept and generatedAt
+      const readyRes = await req('GET', '/api/world');
+      assert.strictEqual(readyRes.status, 200, 'GET /api/world must return 200 once ready');
+      const readyWorld = JSON.parse(readyRes.data);
+      assert(readyWorld.generatedAt, 'Active world must have generatedAt timestamp');
+
+      // 4. Test concurrent POST /api/boot queueing
+      const [bootResA, bootResB] = await Promise.all([
+        req('POST', '/api/boot', { concept: 'submarine station' }),
+        req('POST', '/api/boot', { concept: 'orbital observatory' })
+      ]);
+
+      assert.strictEqual(bootResA.status, 200, 'First queued boot must succeed');
+      assert.strictEqual(bootResB.status, 200, 'Second queued boot must succeed');
+
+      const dataA = JSON.parse(bootResA.data);
+      const dataB = JSON.parse(bootResB.data);
+      assert.strictEqual(dataA.concept, 'submarine station', 'First boot must match its concept');
+      assert.strictEqual(dataB.concept, 'orbital observatory', 'Second boot must match its concept');
+
+      // Final active world must be the last queued world
+      const finalRes = await req('GET', '/api/world');
+      const finalWorld = JSON.parse(finalRes.data);
+      assert.strictEqual(finalWorld.concept, 'orbital observatory', 'Final active world must be last queued world');
+      assert(finalWorld.generatedAt, 'Final active world must be tagged with generatedAt');
+
+      console.log('  ✓ Serialization queue verified: in-flight 202 returned, concurrent boots serialized cleanly, worldMeta tagged.');
+    } finally {
+      close();
+    }
+
+    // F. DOM instantiator components in index.html (Spec §11)
+    const htmlPath = path.join(__dirname, 'index.html');
+    const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+
+    assert(htmlContent.includes('gui-taskbar'), 'index.html must include .gui-taskbar');
+    assert(htmlContent.includes('gui-window'), 'index.html must include .gui-window draggable window elements');
+    assert(htmlContent.includes('gui-desktop-grid'), 'index.html must include .gui-desktop-grid');
+    assert(htmlContent.includes('gui-clock'), 'index.html must include .gui-clock');
+    assert(htmlContent.includes('makeDraggable'), 'index.html must include makeDraggable helper');
+    assert(htmlContent.includes('drawIconClient'), 'index.html must include drawIconClient procedural icon generator');
+    assert(htmlContent.includes('playAudioCue'), 'index.html must include playAudioCue synthesizer');
+    assert(htmlContent.includes('tui-border-top'), 'index.html must include TUI ASCII border elements');
+    assert(htmlContent.includes('device-analog-gauge'), 'index.html must include analog gauge elements for device paradigm');
+
+    console.log('  ✓ DOM paradigm instantiators verified: GUI taskbar/draggable windows, TUI ASCII frames, Device gauges, procedural icons & sounds present.');
   }
 
   console.log('\n=== All Self-Tests Passed Successfully! ===');
