@@ -74,6 +74,7 @@ export XCURSOR_PATH=/usr/share/icons
 export XCURSOR_THEME=capitaine-cursors
 export XCURSOR_SIZE=24
 export LLM_BASE="${LLM_BASE:-http://192.168.1.72:8080}"
+export LARPOS_WORLD_TIMEOUT_MS="${LARPOS_WORLD_TIMEOUT_MS:-120000}"
 export SEATD_SOCK=/run/seatd.sock
 export LIBSEAT_BACKEND=seatd
 

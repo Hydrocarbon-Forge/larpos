@@ -159,8 +159,14 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     ? String(options.concept).trim()
     : 'random';
 
+  const startTime = Date.now();
+  const timeoutMs = options.timeout || parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
+
   // Always prepare deterministic fallback for the exact same seed & concept
   const fallback = getWorldModule().generateWorld(seedInput, concept);
+  fallback.concept = concept;
+  fallback.generatedAt = Date.now();
+  fallback.worldMeta = { concept, generatedAt: fallback.generatedAt };
 
   if (options.disableLLM || process.env.LLM_DISABLED === '1') {
     return fallback;
@@ -171,19 +177,38 @@ async function generateWorldWithLLM(seedInput, options = {}) {
   try {
     const model = await getModelName(baseUrl, options.probeTimeout || 2000);
     if (!model) {
+      fallback.llmFailed = true;
+      fallback.source = 'combinatorial';
       return fallback;
     }
 
     const prng = new PRNG(seedInput);
     const hexSeed = prng.hexSeed;
 
-    const conceptInstruction = concept !== 'random'
-      ? `INTENT SEED / CONCEPT: "${concept}". The entire world MUST be deeply shaped by this idea. The theme, keeper, laws, entities (and their app scripts) must all be about "${concept}".`
-      : 'INTENT SEED / CONCEPT: (none - generate a strange, original hallucinated reality).';
+    const isPracticalDesktop = /practical|lightweight|desktop|fast|minimal|linux|work|office|utility/i.test(concept);
+
+    let conceptInstruction;
+    if (isPracticalDesktop) {
+      conceptInstruction = [
+        `INTENT SEED / CONCEPT: "${concept}".`,
+        'CRITICAL TONE DIRECTIVE: The user wants a clean, highly practical and lightweight desktop operating system.',
+        'The OS MUST have an authentic, clean computer/Linux texture (file manager, text editor, terminal emulator, system monitor, taskbar, system settings).',
+        'Do NOT default to strange eerie mystical or horror fiction. Strangeness should appear ONLY as subtle light seasoning within normal computer reality.',
+        'The interface MUST be "gui". Default keeper should be a system administrator or process supervisor.',
+        'Entities must represent genuine desktop tools and system applications.'
+      ].join(' ');
+    } else if (concept !== 'random') {
+      conceptInstruction = [
+        `INTENT SEED / CONCEPT: "${concept}".`,
+        `The entire operating system MUST be deeply and coherently shaped by this concept: theme, keeper, laws, entities, apps, and vocabulary.`
+      ].join(' ');
+    } else {
+      conceptInstruction = 'INTENT SEED / CONCEPT: (none - you may manifest a strange, eerie, poetic inhabited hallucinated reality).';
+    }
 
     const systemPrompt = [
-      'You are the world engine for LarpOS, an operating system that is an eerie, hallucinated reality.',
-      'You must generate an inhabited, strange, coherent world spec based on the given seed and concept prompt.',
+      'You are the world engine for LarpOS, an operating system generator that manifests inhabited operating systems conditioned on user concept prompts.',
+      'You must generate a coherent world spec matching the requested concept and seed.',
       conceptInstruction,
       'Every entity in the system is also an openable application written into the Larp script.',
       'Respond ONLY with a single raw JSON object matching the required schema.',
@@ -234,17 +259,33 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     ], {
       temperature: 0.75,
       max_tokens: 2800,
-      timeout: options.timeout || 35000
+      timeout: timeoutMs
     });
 
     const parsed = extractJSON(rawOutput);
     if (!parsed) {
+      const duration = Date.now() - startTime;
+      console.log(`[LarpOS] LLM world generation returned unparsable output after ${duration}ms, falling back to combinatorial (seed: ${hexSeed}, concept: "${concept}")`);
+      fallback.llmFailed = true;
+      fallback.source = 'combinatorial';
       return fallback;
     }
 
     // Validate and normalize essential schema fields
-    if (typeof parsed.name !== 'string' || !parsed.name.trim()) return fallback;
-    if (typeof parsed.theme !== 'string' || !parsed.theme.trim()) return fallback;
+    if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
+      const duration = Date.now() - startTime;
+      console.log(`[LarpOS] LLM world generation schema invalid (missing name) after ${duration}ms, falling back to combinatorial (seed: ${hexSeed}, concept: "${concept}")`);
+      fallback.llmFailed = true;
+      fallback.source = 'combinatorial';
+      return fallback;
+    }
+    if (typeof parsed.theme !== 'string' || !parsed.theme.trim()) {
+      const duration = Date.now() - startTime;
+      console.log(`[LarpOS] LLM world generation schema invalid (missing theme) after ${duration}ms, falling back to combinatorial (seed: ${hexSeed}, concept: "${concept}")`);
+      fallback.llmFailed = true;
+      fallback.source = 'combinatorial';
+      return fallback;
+    }
 
     // Palette normalization (accepts array or object map of hex colors)
     let palette = parsed.palette;
@@ -396,16 +437,24 @@ async function generateWorldWithLLM(seedInput, options = {}) {
       reseedVerb,
       openVerb,
       homeVerb,
-      isLLM: true
+      isLLM: true,
+      generatedAt: Date.now(),
+      worldMeta: { concept: parsed.concept || concept, generatedAt: Date.now() }
     };
+
+    const duration = Date.now() - startTime;
+    console.log(`[LarpOS] World generation completed via LLM in ${duration}ms (seed: ${hexSeed}, concept: "${concept}")`);
 
     try {
       getLarpModule().writeWorldLarp(world);
     } catch (_) {}
 
     return world;
-  } catch (_) {
-    // Catch ANY failure (network error, timeout, unparsable JSON) and return combinatorial fallback
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.log(`[LarpOS] LLM world generation failed or timed out after ${duration}ms, falling back to combinatorial: ${err.message} (seed: ${seedInput}, concept: "${concept}")`);
+    fallback.llmFailed = true;
+    fallback.source = 'combinatorial';
     return fallback;
   }
 }

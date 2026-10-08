@@ -1148,8 +1148,11 @@
     let bgWorldPollTimer = null;
     let bgWorldStatusEl = null;
     let bgWorldPollStart = Date.now();
+    window.pendingBootConcept = null;
 
     async function pollInitialWorld() {
+      if (window.pendingBootConcept) return; // Do not accept pre-boot world once a concept is pending
+
       try {
         const res = await fetch('/api/world');
         if (res.status === 200) {
@@ -1196,57 +1199,97 @@
         bgWorldPollTimer = null;
       }
 
+      const targetConcept = (conceptText && String(conceptText).trim().toLowerCase() !== 'random')
+        ? String(conceptText).trim()
+        : 'random';
+      window.pendingBootConcept = targetConcept.toLowerCase();
+
+      // Lock input controls while boot is in flight
+      dom.conceptInput.disabled = true;
+      dom.btnConceptBoot.disabled = true;
+      dom.btnConceptRandom.disabled = true;
+
       const line = document.createElement('div');
       line.className = 'boot-log-line';
-      line.textContent = `[BOOT] Intent seed confirmed: "${conceptText || 'random'}". Seeding reality...`;
+      line.textContent = `[BOOT] Intent seed confirmed: "${targetConcept}". Seeding reality...`;
       dom.bootLogContainer.appendChild(line);
 
       const statusLine = document.createElement('div');
       statusLine.className = 'boot-log-line';
       statusLine.style.color = '#4ecdc4';
-      statusLine.textContent = '[BOOT] Generating reality matrix...';
+      statusLine.textContent = '[BOOT] Generating reality matrix (0s)...';
       dom.bootLogContainer.appendChild(statusLine);
 
       const bootStart = Date.now();
-      const bootTimeout = 60000;
+      const bootTimeout = 130000;
+      const timerInterval = setInterval(() => {
+        const elapsed = Math.round((Date.now() - bootStart) / 1000);
+        statusLine.textContent = `[BOOT] Generating reality matrix (${elapsed}s)...`;
+      }, 1000);
+
+      function matchesTarget(world) {
+        if (!world) return false;
+        if (targetConcept.toLowerCase() === 'random') return true;
+        const wc = (world.concept || '').trim().toLowerCase();
+        return wc === targetConcept.toLowerCase();
+      }
+
+      async function finalizeBoot(worldData) {
+        clearInterval(timerInterval);
+        window.pendingBootConcept = null;
+
+        if (worldData.llmFailed || (worldData.source === 'combinatorial' && worldData.llmFailed)) {
+          const offlineNotice = document.createElement('div');
+          offlineNotice.className = 'boot-log-line';
+          offlineNotice.style.color = '#e07a5f';
+          offlineNotice.textContent = '[BOOT] local brain unreachable — offline reality';
+          dom.bootLogContainer.appendChild(offlineNotice);
+          await new Promise(r => setTimeout(r, 600));
+        }
+
+        renderWorld(worldData);
+        activateKioskDisguise();
+        switchView('overview');
+      }
 
       try {
         const res = await fetch('/api/boot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ concept: conceptText || 'random' })
+          body: JSON.stringify({ concept: targetConcept })
         });
 
         if (res.status === 200) {
           const worldData = await res.json();
-          renderWorld(worldData);
-          activateKioskDisguise();
-          switchView('overview');
-          return;
+          if (matchesTarget(worldData)) {
+            await finalizeBoot(worldData);
+            return;
+          }
         }
 
-        // If 202 or pending returned, poll /api/world until 200
+        // If 202 or pending returned, poll /api/world until matching 200 world arrives
         while (Date.now() - bootStart < bootTimeout) {
-          await new Promise(r => setTimeout(r, 1000));
-          const elapsed = Math.round((Date.now() - bootStart) / 1000);
-          statusLine.textContent = `[BOOT] Generating reality matrix (${elapsed}s)...`;
+          await new Promise(r => setTimeout(r, 1200));
 
           try {
             const pollRes = await fetch('/api/world');
             if (pollRes.status === 200) {
               const pollData = await pollRes.json();
-              if (pollData && !pollData.booting) {
-                renderWorld(pollData);
-                activateKioskDisguise();
-                switchView('overview');
+              if (pollData && !pollData.booting && matchesTarget(pollData)) {
+                await finalizeBoot(pollData);
                 return;
               }
             }
           } catch (_) {}
         }
 
-        throw new Error('Reality generation timed out after 60s');
+        throw new Error('Reality generation timed out');
       } catch (err) {
+        clearInterval(timerInterval);
+        window.pendingBootConcept = null;
+        dom.conceptInput.disabled = false;
+        dom.btnConceptBoot.disabled = false;
+        dom.btnConceptRandom.disabled = false;
         console.error(err);
         statusLine.style.color = '#ff4d4d';
         statusLine.textContent = '[FAIL] Reality initialization error: ' + err.message;
@@ -1521,6 +1564,10 @@
         return;
       }
 
+      // Lock input while command is in flight
+      dom.cmdInput.disabled = true;
+      dom.cmdInput.placeholder = 'executing command...';
+
       try {
         const res = await fetch('/api/command', {
           method: 'POST',
@@ -1576,19 +1623,26 @@
         } else {
           dom.appFeedback.textContent = 'TRANSMISSION FAILURE: ' + err.message;
         }
+      } finally {
+        dom.cmdInput.disabled = false;
+        dom.cmdInput.placeholder = 'type shell command (cd, ls, cat, bin) or in-world verb...';
+        dom.cmdInput.focus();
       }
     }
 
     // Concept Screen Event Listeners
     dom.btnConceptBoot.onclick = () => {
+      if (dom.conceptInput.disabled) return;
       bootWithConcept(dom.conceptInput.value.trim());
     };
     dom.btnConceptRandom.onclick = () => {
+      if (dom.conceptInput.disabled) return;
       bootWithConcept('random');
     };
     dom.conceptInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        if (dom.conceptInput.disabled) return;
         bootWithConcept(dom.conceptInput.value.trim());
       }
     });
@@ -1607,6 +1661,10 @@
 
     // Terminal Input Event Listener
     dom.cmdInput.addEventListener('keydown', (e) => {
+      if (dom.cmdInput.disabled) {
+        e.preventDefault();
+        return;
+      }
       if (e.key === 'Enter') {
         e.preventDefault();
         submitCommand(dom.cmdInput.value);

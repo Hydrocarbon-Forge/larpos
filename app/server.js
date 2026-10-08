@@ -45,6 +45,8 @@ function serializeWorld(world) {
     name: world.name,
     theme: world.theme,
     concept: world.concept || 'random',
+    generatedAt: world.generatedAt || Date.now(),
+    worldMeta: world.worldMeta || { concept: world.concept || 'random', generatedAt: world.generatedAt || Date.now() },
     interface: world.interface || 'device',
     palette: world.palette,
     keeper: world.keeper,
@@ -66,6 +68,8 @@ function serializeWorld(world) {
     helpVerb: world.helpVerb || 'help',
     reseedVerb: world.reseedVerb || 'reseed',
     source: world.isLLM ? 'llm' : 'combinatorial',
+    llmFailed: !!world.llmFailed,
+    designSpec: world.designSpec || null,
     isParsedFromLarp: !!world.isParsedFromLarp
   };
 }
@@ -79,6 +83,22 @@ function createServer(initialSeed, port = 8080, options = {}) {
   let activeLarpPath = null;
   let larpWatcher = null;
   let session = null;
+
+  let pendingGenerations = 0;
+  let generationQueue = Promise.resolve();
+
+  function serializeWorldGeneration(taskFn) {
+    pendingGenerations++;
+    const run = generationQueue.then(async () => {
+      try {
+        return await taskFn();
+      } finally {
+        pendingGenerations--;
+      }
+    });
+    generationQueue = run.catch(() => {});
+    return run;
+  }
 
   const setupWatcher = (filePath) => {
     if (larpWatcher) larpWatcher.close();
@@ -124,15 +144,22 @@ function createServer(initialSeed, port = 8080, options = {}) {
   if (options.initialWorld) {
     setupWorld(options.initialWorld);
   } else if (options.worldPromise) {
-    options.worldPromise.then(world => {
-      setupWorld(world);
-    }).catch(err => {
-      console.error('[LarpOS] Background world generation error, using fallback:', err);
-      setupWorld(generateWorld(initialSeed, options.concept));
+    serializeWorldGeneration(async () => {
+      try {
+        const world = await options.worldPromise;
+        setupWorld(world);
+        return world;
+      } catch (err) {
+        console.error('[LarpOS] Background world generation error, using fallback:', err);
+        const fallback = generateWorld(initialSeed, options.concept);
+        setupWorld(fallback);
+        return fallback;
+      }
     });
-  } else if (!options.pendingWorldGen && !options.delayWorldGenMs) {
-    // Synchronous fallback
-    setupWorld(generateWorld(initialSeed, options.concept));
+  } else if (!options.noInitialWorld && !options.pendingWorldGen && !options.delayWorldGenMs && initialSeed !== undefined && initialSeed !== null) {
+    // Synchronous fallback (e.g. unit tests initializing world directly with seed)
+    const initial = generateWorld(initialSeed, options.concept);
+    setupWorld(initial);
   }
 
   // Support injected slow world-gen delay for automated testing
@@ -176,17 +203,17 @@ function createServer(initialSeed, port = 8080, options = {}) {
       return;
     }
 
-    // World metadata endpoint: returns 200 when ready, 202 when still booting
+    // World metadata endpoint: returns 200 when ready, 202 when still booting or generating
     if (req.method === 'GET' && pathname === '/api/world') {
-      if (!isWorldReady || !activeWorld) {
+      if (pendingGenerations > 0 || !isWorldReady || !activeWorld) {
         res.writeHead(202, {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'no-cache'
         });
         res.end(JSON.stringify({
           booting: true,
-          status: 'generating',
-          message: 'Reality matrix is materializing...'
+          status: pendingGenerations > 0 ? 'generating' : 'awaiting_concept',
+          message: pendingGenerations > 0 ? 'Reality matrix is materializing...' : 'Awaiting intent seed concept...'
         }));
         return;
       }
@@ -223,19 +250,35 @@ function createServer(initialSeed, port = 8080, options = {}) {
           }
         } catch (_) {}
 
-        let newWorld = null;
-        if (!disableLLM && process.env.LLM_DISABLED !== '1') {
-          try {
-            newWorld = await generateWorldWithLLM(seed, { concept, llmBase, timeout: 25000 });
-          } catch (_) {}
-        }
-        if (!newWorld) {
-          newWorld = generateWorld(seed, concept);
-        }
+        const timeoutMs = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
 
-        setupWorld(newWorld);
+        const newWorld = await serializeWorldGeneration(async () => {
+          let world = null;
+          const t0 = Date.now();
+          if (!disableLLM && process.env.LLM_DISABLED !== '1') {
+            try {
+              world = await generateWorldWithLLM(seed, {
+                concept,
+                llmBase,
+                timeout: timeoutMs
+              });
+            } catch (err) {
+              console.error('[LarpOS] LLM error during boot generation:', err.message);
+            }
+          }
+          if (!world) {
+            world = generateWorld(seed, concept);
+          }
+          world.concept = concept;
+          world.generatedAt = Date.now();
+          world.worldMeta = { concept, generatedAt: world.generatedAt };
+          setupWorld(world);
+          const elapsed = Date.now() - t0;
+          console.log(`[LarpOS] Reality manifested in ${elapsed}ms for concept "${concept}" (${world.seed}) [${world.isLLM ? 'LLM' : 'combinatorial'}]`);
+          return world;
+        });
 
-        const publicWorld = serializeWorld(activeWorld);
+        const publicWorld = serializeWorld(newWorld);
         res.writeHead(200, {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'no-cache'
@@ -501,39 +544,16 @@ if (require.main === module) {
     console.log(`[LarpOS] Local LLM disabled; combinatorial fallback active.`);
   }
 
-  // 2. Start background world generation promise (non-blocking)
-  const worldPromise = (async () => {
-    let world = null;
-    if (!disableLLM && process.env.LLM_DISABLED !== '1') {
-      try {
-        world = await generateWorldWithLLM(seed, { llmBase, timeout: 25000 });
-      } catch (_) {}
-    }
-    if (!world) {
-      world = generateWorld(seed);
-    }
-    return world;
-  })();
-
-  // 3. Create server wired with background worldPromise
+  // 2. Create server without pre-boot random world shadowing user concept
   const app = createServer(seed, port, {
     disableLLM,
     llmBase,
-    worldPromise
+    noInitialWorld: true
   });
 
-  // 4. BIND HTTP PORT FIRST (listen immediately before async world generation finishes)
+  // 3. BIND HTTP PORT FIRST (listen immediately before any world generation)
   app.server.listen(port, '0.0.0.0', () => {
     console.log(`[LarpOS] World Engine online at http://0.0.0.0:${port}/ (port bound, accepting connections)`);
-  });
-
-  worldPromise.then((world) => {
-    console.log(`[LarpOS] Active Reality: "${world.name}" [source: ${world.isLLM ? 'LLM' : 'combinatorial'}]`);
-    console.log(`[LarpOS] Concept: "${world.concept}"`);
-    console.log(`[LarpOS] Seed: ${world.seed}`);
-    console.log(`[LarpOS] Resident Keeper: ${world.keeper ? world.keeper.name : 'Unknown'}`);
-  }).catch((err) => {
-    console.error(`[LarpOS] Initial world generation warning:`, err);
   });
 }
 
