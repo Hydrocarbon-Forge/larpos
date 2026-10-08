@@ -414,6 +414,55 @@ stable per world.
   disabled (further typing/Enter ignored) and a visible progress line shows
   elapsed seconds; re-enabled when the response lands.
 
+### 12. Neutral framework — zero pre-baked content (Nathan, 2026-10-08)
+
+The engine is a **framework to make an OS, not a library of pre-made OSes**.
+It must not bias the model — or any world — in any way. All **content** (world
+names, app names, app text, verbs, colors, story lines, `//`-style separators,
+keeper/law/sector fiction) comes from **the LLM conditioned on the user's
+concept** (primary path). The offline combinatorial path must be a **neutral
+generator that composes a NOVEL world** from structural primitives (name parts,
+domain nouns, app archetypes like file-manager/terminal/settings/monitor,
+aesthetic params) — NOT a fixed catalog of 9 pre-themed strange machines
+(`dead_god_cranium`, `ash_railway`, `compost_retort`, …), whose 54 pre-written
+narrative `screen:` blobs currently leak into fallback worlds.
+
+Concretely purge/replace:
+- `world.js` ARCHETYPES catalog + all narrative prose (screens, element
+  responses, keeper lines, ` // ` separators, "RECONSTITUTED SECTOR",
+  "ghost monitor"-style app names, `trepan`/`vault`-style in-world verbs) →
+  delete. Replace with `generateWorld()` = seeded composition of neutral
+  primitives steered by concept keywords; the result is a *new* world every
+  seed, plain-language, no sci-fi/fantasy vocabulary.
+- `vfs.js`: `/bin /apps /etc /log /dev` is fine as a *neutral* POSIX-ish
+  default tree, but the hallucination mechanic must materialize folders with
+  **world-derived** content (from the world's theme/concept via the generator),
+  never the hardcoded `stratum.log` sci-fi template.
+- `larp.js` damaged-app shell: the *mechanism* (garbled `.larp` → damaged app)
+  stays (reader-not-validator), but its content is **neutral and world-derived**
+  ("unreadable section; rendering in reduced fidelity"), not a canned sci-fi
+  story.
+- `commands.js` / `llm.js`: no hardcoded keeper personas, laws, or `//`
+  formatting; the LLM system prompt must not seed sci-fi vocabulary; tone comes
+  from the concept.
+- In-world verbs (open/home/extra): standard by default (click / double-click /
+  menu); invented verbs ONLY if the concept itself suggests a strange interface.
+- Cursor is part of the design: the instantiator emits a themed cursor
+  (standard arrow, crosshair, or a generated themed cursor) from the design
+  spec; never a fixed `cursor: default`.
+- Bottom shell: the terminal is one component placed per paradigm/layout spec —
+  gui desktops may have a taskbar (position from layout), but NO world is
+  forced into "terminal box pinned to the bottom over a gradient".
+- Selftest: assert that with a practical concept, the generated world contains
+  NO pre-baked strings (no `stratum.log` template copy, no ` // `, no
+  archetype names, no `trepan`/`RECONSTITUTED`/keeper prose), and that two
+  different seeds produce different world names/app sets.
+
+The acceptance bar: a prompt that describes a TYPE OF OS (what it is, how it
+looks, how it functions) yields an OS that looks/feels like that type, with the
+strange mechanisms present but **quiet** — they only surface visibly when the
+concept itself is strange.
+
 ## Acceptance criteria
 
 1. `node app/server.js` (zero deps) serves `/`, `/api/world`, `/api/command` on :8080.
