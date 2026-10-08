@@ -202,19 +202,143 @@ screen). Determinism note: because the model is intentionally non-deterministic,
 do NOT assert exact-equality of live app renders across opens — assert *validity*
 (well-formed screen, has the named element, renders within palette) instead.
 
+### 6. Boot sequence: ASCII text, then the interface paradigm is generated (Nathan, 2026-10-08)
+
+Clarification from the user: the ASCII/text look is a BOOT PHASE, not the whole OS.
+
+- **Boot phase (text):** before the OS exists, the kiosk shows a full-viewport
+  *terminal* (monospace, palette-neutral dark). A short ASCII art header (LarpOS
+  mark), a boot log that types itself out (fake-ish, fast, in-world: "loading
+  hallucination core...", "seeding reality..."), then the concept prompt renders as
+  a terminal prompt — tagline + "what OS are you making?" + input + [RANDOM]. This
+  is the only screen that is *always* text/ASCII.
+- **The interface paradigm is part of the generation.** After the concept is
+  submitted, the world spec gains `world.interface` — the *kind of interface the
+  OS presents*: `gui` (windows/panels), `tui` (full terminal), `single-panel`,
+  `device` (the whole OS is one strange instrument), `scene` (you are *in* it,
+  no chrome at all) — or a per-world invention. The concept prompt steers it
+  ("a terminal" → tui, "a cockpit" → device, "just a room" → scene). The UI shell
+  renders *whichever paradigm the world chose* — the shell is a paradigm
+  renderer, not one fixed layout. Apps and the terminal are components that live
+  inside whatever paradigm got generated.
+- Everything after boot is **rendered by JS from the spec** — GUI, TUI, or
+  whatever. No fixed layout assumption.
+
+### 7. The terminal is a component of the OS, with a hallucinated filesystem (Nathan, 2026-10-08)
+
+The terminal is not the whole machine — it is one (usually prominent) component
+inside the OS, alongside the apps. It behaves like a real shell whose state is
+held by the AI:
+
+- **Virtual filesystem (in the LLM context, not on disk):** paths, folders, and
+  files exist as conversation state in the world engine. `cd`, `ls`, `cat`,
+  `mkdir`, `echo`, `type`... all manipulate/reflect that virtual state. File
+  *contents* live in the LLM context (ASCII text), not on the real filesystem.
+- **Hallucination is the mechanic:** if you `cd` into a folder that didn't
+  exist, the AI may decide it does now — and the next `ls` shows it, with
+  contents. Incoherent input becomes in-world weirdness (see reader-not-validator
+  policy, §5). The filesystem is *whatever the AI believes it is* at this
+  moment.
+- **Binary slot:** a small real storage area (`/var/larpos/bins/` in the image;
+  `~/.larpos/bins` locally) holds binary files the user can create/reference.
+  When a conversation references a binary by name, the terminal layer resolves
+  the *real* file (size, head, run it if executable) and feeds that into the
+  AI's understanding ("you call the real cat and figure it out"). The LLM
+  doesn't parse the bytes; the engine does.
+- **Conversation store:** all terminal exchanges (and world events) persist as
+  JSONL under `/var/larpos/state/` (image) / `~/.larpos/state/` (local): one
+  file per world boot. This is the "spot where all the conversation json is
+  stored."
+- **Responsiveness (the feel rule):** terminal responses go through the LLM at
+  *minimal thinking* — short system prompt, low max tokens, low temperature,
+  no tool-use, sub-second target. The AI is prompted to *not think much or at
+  all* — pattern-complete the shell, don't deliberate. When the LLM is down,
+  the combinatorial shell (echo-style: `ls` lists the current virtual dir,
+  `cat` shows stored content) keeps it feeling instant. The terminal must never
+  visibly wait on a slow model — if a response isn't in ~1s, it renders the
+  combinatorial line and patches in the LLM line if it lands (best-effort,
+  never a blocking spinner).
+- **Bin commands are Larp script (item 10):** the world spec lists `world.bin`
+  — per-world custom commands (names + one-line behavior). They are `.larp`
+  entries interpreted at run time (see §8): typing one runs its interpreted
+  behavior, not a real binary. New commands "in local bin" = larpscript
+  entries the world (or the keeper) can add during play.
+
+### 8. The Larp script is a FILE FORMAT: `.larp` (Nathan, 2026-10-08)
+
+The OS is *defined by Larp script files*:
+
+- Format: a structured text document (JSON-lines or tagged plain text — pick
+  one, document it in `app/larp.md`) where each top-level entry is a
+  **section**: `world` (name/theme/palette/keeper/laws/interface), `app`
+  (title/idiom/interactive element(s)/behavior sketch), `bin` (command
+  name/behavior), `scene` (opening monologue), `law` (system law). One
+  `.larp` file per boot = the entire OS.
+- Boot writes the boot's world to `<state dir>/world-<seed>.larp` (and keeps
+  the last N). The engine *reads the .larp file* as its source of truth — the
+  app catalog, bin commands, and laws are parsed from it, not from in-memory
+  objects. Apps are therefore "each in a larp script file" (or the section
+  within the boot file — document which you choose; the file on disk is the
+  truth).
+- **Live rewriting (item 5):** the engine watches for edits to the active
+  `.larp` file (mtime poll or fs.watch where available) and re-parses on
+  change — so the OS literally rewrites itself live: edit the file (by hand,
+  by the keeper, by another process) and the running OS changes shape. The
+  in-world "rewrite" verb can also append/patch sections through the LLM.
+  Corrupt edits are interpreted, not rejected (reader-not-validator).
+
+### 9. The kiosk disguise: no browser, ever (Nathan, 2026-10-08)
+
+Once booted, there is **no way to see it's a browser** (item 6):
+
+- Global capture: `document`-level `keydown`/`mousedown`/`wheel` handlers
+  (capture phase) route everything through the OS layer. Every key and click
+  is an OS input, not a page input.
+- Browser escapes blocked: `contextmenu` (right-click) suppressed,
+  `Ctrl/Cmd+R, F11, F12, Ctrl+Shift+I/J/C, Ctrl+P, Alt+Left/Right` (nav)
+  suppressed, `Esc` repurposed (in-world: "the OS does not close"), drag
+  disabled, `user-select: none` globally (allow selection only inside the
+  terminal's own copy affordance if any).
+- No browser chrome cues: kiosk mode hides the toolbar; the UI never shows a
+  URL, tab, or scrollbar-like artifact; document title stays the OS name.
+- Note for the image: Firefox kiosk already hides most chrome; this section is
+  the JS-side layer so even a non-kiosk window can't reveal the browser.
+- Exception: the *boot screen* (ASCII, §6) may allow right-click for the
+  concept input; the disguise is a post-boot state.
+
+### 10. Dynamic / live-rewritable OS (Nathan, 2026-10-08)
+
+- The running OS is a *live interpretation* of the active `.larp` file + the
+  conversation state. Reboot a world (same seed, same concept) → same shape,
+  but the interpreter may render it slightly differently (model variance is
+  the feature).
+- In-world verbs can mutate the active world spec (keeper rewrites a law, an
+  app gets added mid-play) — the spec file updates, the UI re-renders. The OS
+  is never frozen at boot.
+
 ## Acceptance criteria
 
 1. `node app/server.js` (zero deps) serves `/`, `/api/world`, `/api/command` on :8080.
 2. `node app/selftest.js` passes (offline and with LLM up).
-3. Two boots (seeds) produce clearly different worlds; same seed reproduces exactly.
+3. Two boots (seeds) produce clearly different worlds; same seed reproduces exactly
+   (world spec level; live renders may drift by design).
 4. `build.sh` wires the app into the image via skel dir; `run_larpos.sh` points the
    kiosk at the engine. (Image build itself left as manual step.)
 5. The fiction is *good*: the worlds feel inhabited and coherent, not template fill.
-   This is the bar — judge it by reading a few generated worlds with different seeds.
-6. Booting shows the concept screen first; typing an idea steers the generated world
-   toward that idea (LLM path), random/blank still works.
-7. Apps are written in the Larp script and *interpreted live* by the AI at open time
-   (spec = description; open = instantiated screen). Open-app and go-home always work;
-   a broken/empty LLM render falls back to a generic shell, never a white screen; the
-   app is held stable while open and may drift between closes/reopens (model variance,
-   not forced).
+6. Boot = ASCII terminal with self-typing log, then the concept prompt ("what OS
+   are you making?"). Submitting the concept generates the world *including its
+   interface paradigm* (gui/tui/device/scene or invented) — the UI renders the
+   chosen paradigm.
+7. Apps are Larp-script sections, interpreted live at open; open-app and go-home
+   always work; interpreter is a reader (garbled = interpreted, damaged shell last
+   resort); held while open, may drift on reopen.
+8. The terminal component: `cd`/`ls`/`cat`/`mkdir`/`echo` over a virtual
+   filesystem held in the LLM context; hallucinated folders materialize; binary
+   slot resolves real files; conversation JSONL persisted per boot; minimal-thinking
+   LLM prompting keeps it sub-second-feeling, combinatorial echo fallback offline.
+9. `.larp` file format: boot writes `world-<seed>.larp`, engine parses it as
+   source of truth; file edits re-parse live (OS rewrites itself); bin commands are
+   `.larp` entries interpreted at run time.
+10. Post-boot disguise: global key/click capture, right-click and browser shortcuts
+    blocked, no URL/tab/scrollbar cues, in-world `Esc`. Selftest verifies the
+    handlers exist and the suppressed shortcuts fire no browser behavior.
