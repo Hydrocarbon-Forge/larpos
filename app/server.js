@@ -1,15 +1,19 @@
 // app/server.js — Plain Node.js HTTP server for LarpOS
-// Zero dependencies. Serves /, /api/world, and /api/command on port 8080.
+// Zero npm dependencies. Serves /, /api/world, and /api/command on port 8080.
+// Integrates local LLM API (OpenAI-compatible) with automatic combinatorial fallback.
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { generateWorld } = require('./world');
 const { CommandSession } = require('./commands');
+const { getLLMBase, generateWorldWithLLM } = require('./llm');
 
 function parseCliArgs() {
   let seed = process.env.LARPOS_SEED;
   let port = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
+  let disableLLM = process.env.LLM_DISABLED === '1';
+  let llmBase = process.env.LLM_BASE || getLLMBase();
 
   const args = process.argv.slice(2);
   for (let i = 0; i < args.length; i++) {
@@ -22,28 +26,40 @@ function parseCliArgs() {
       port = parseInt(args[++i], 10);
     } else if (arg.startsWith('--port=')) {
       port = parseInt(arg.slice(7), 10);
+    } else if (arg === '--llm-base' && i + 1 < args.length) {
+      llmBase = args[++i];
+    } else if (arg.startsWith('--llm-base=')) {
+      llmBase = arg.slice(11);
+    } else if (arg === '--no-llm' || arg === '--offline') {
+      disableLLM = true;
     }
   }
 
-  return { seed, port };
+  return { seed, port, disableLLM, llmBase };
 }
 
-function createServer(initialSeed, port = 8080) {
-  let activeWorld = generateWorld(initialSeed);
+function createServer(initialSeed, port = 8080, options = {}) {
+  const disableLLM = !!options.disableLLM;
+  const llmBase = options.llmBase || getLLMBase();
+
+  // Baseline fallback world
+  let activeWorld = options.initialWorld || generateWorld(initialSeed);
+
   const session = new CommandSession(activeWorld, {
+    disableLLM,
+    llmBase,
     onReseed: (newWorld) => {
       activeWorld = newWorld;
-      console.log(`[LarpOS] Reality reseeded: ${activeWorld.name} (${activeWorld.seed})`);
+      console.log(`[LarpOS] Reality reseeded: "${activeWorld.name}" (${activeWorld.seed}) [${activeWorld.isLLM ? 'LLM' : 'combinatorial'}]`);
     }
   });
 
   const htmlPath = path.join(__dirname, 'index.html');
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
 
-    // CORS & common headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -86,7 +102,8 @@ function createServer(initialSeed, port = 8080) {
         laws: activeWorld.laws,
         verbs: activeWorld.verbs,
         script: activeWorld.script,
-        seed: activeWorld.seed
+        seed: activeWorld.seed,
+        source: activeWorld.isLLM ? 'llm' : 'combinatorial'
       };
 
       res.writeHead(200, {
@@ -108,7 +125,7 @@ function createServer(initialSeed, port = 8080) {
         }
       });
 
-      req.on('end', () => {
+      req.on('end', async () => {
         let commandText = '';
         try {
           if (body.trim().startsWith('{')) {
@@ -121,7 +138,7 @@ function createServer(initialSeed, port = 8080) {
           commandText = body;
         }
 
-        const result = session.execute(commandText);
+        const result = await session.execute(commandText);
         const payload = {
           out: result.out,
           reseeded: !!result.reseeded,
@@ -143,7 +160,8 @@ function createServer(initialSeed, port = 8080) {
             laws: result.world.laws,
             verbs: result.world.verbs,
             script: result.world.script,
-            seed: result.world.seed
+            seed: result.world.seed,
+            source: result.world.isLLM ? 'llm' : 'combinatorial'
           };
         }
 
@@ -166,23 +184,67 @@ function createServer(initialSeed, port = 8080) {
     res.end('Not Found');
   });
 
-  return { server, session, getWorld: () => activeWorld };
+  return {
+    server,
+    session,
+    getWorld: () => activeWorld,
+    setWorld: (w) => {
+      activeWorld = w;
+      session.setWorld(w);
+    }
+  };
+}
+
+async function createServerAsync(initialSeed, port = 8080, options = {}) {
+  const disableLLM = !!options.disableLLM || process.env.LLM_DISABLED === '1';
+  const llmBase = options.llmBase || getLLMBase();
+
+  let initialWorld = null;
+  if (!disableLLM) {
+    try {
+      initialWorld = await generateWorldWithLLM(initialSeed, {
+        llmBase,
+        timeout: 25000
+      });
+      if (initialWorld) {
+        console.log(`[LarpOS] Generated initial world via local LLM at ${llmBase}`);
+      }
+    } catch (_) {
+      // Fallback
+    }
+  }
+
+  if (!initialWorld) {
+    initialWorld = generateWorld(initialSeed);
+  }
+
+  return createServer(initialSeed, port, {
+    ...options,
+    disableLLM,
+    llmBase,
+    initialWorld
+  });
 }
 
 if (require.main === module) {
-  const { seed, port } = parseCliArgs();
-  const { server, getWorld } = createServer(seed, port);
+  const { seed, port, disableLLM, llmBase } = parseCliArgs();
 
-  server.listen(port, '0.0.0.0', () => {
-    const world = getWorld();
-    console.log(`[LarpOS] World Engine online at http://0.0.0.0:${port}/`);
-    console.log(`[LarpOS] Active Reality: "${world.name}"`);
-    console.log(`[LarpOS] Seed: ${world.seed}`);
-    console.log(`[LarpOS] Resident Keeper: ${world.keeper.name}`);
-  });
+  (async () => {
+    console.log(`[LarpOS] Booting system... (LLM API: ${disableLLM ? 'DISABLED' : llmBase})`);
+    const app = await createServerAsync(seed, port, { disableLLM, llmBase });
+
+    app.server.listen(port, '0.0.0.0', () => {
+      const world = app.getWorld();
+      console.log(`[LarpOS] World Engine online at http://0.0.0.0:${port}/`);
+      console.log(`[LarpOS] Active Reality: "${world.name}" [source: ${world.isLLM ? 'LLM' : 'combinatorial'}]`);
+      console.log(`[LarpOS] Seed: ${world.seed}`);
+      console.log(`[LarpOS] Resident Keeper: ${world.keeper.name}`);
+    });
+  })();
 }
 
 module.exports = {
   createServer,
+  createServerAsync,
   parseCliArgs
 };

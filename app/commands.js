@@ -1,12 +1,16 @@
 // app/commands.js — In-character command layer & conversation state for LarpOS
+// Zero dependencies. Supports local LLM with automatic combinatorial fallback.
 
 const { generateWorld } = require('./world');
+const { generateWorldWithLLM, generateCommandResponseWithLLM } = require('./llm');
 
 class CommandSession {
   constructor(world, options = {}) {
     this.world = world;
     this.history = []; // last few command records
     this.onReseed = options.onReseed || null;
+    this.disableLLM = !!options.disableLLM;
+    this.llmBase = options.llmBase || null;
   }
 
   setWorld(world) {
@@ -50,7 +54,7 @@ class CommandSession {
     return null;
   }
 
-  execute(rawText) {
+  executeFallback(rawText) {
     const text = (rawText || '').trim();
     if (!text) {
       return {
@@ -65,7 +69,6 @@ class CommandSession {
     if (lower === 'new world' || lower === 'new-world' || lower === 'reseed' || lower === this.world.reseedVerb) {
       const oldKeeper = this.world.keeper;
       const oldName = this.world.name;
-      // Generate new seed
       const nextSeed = ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
       const newWorld = generateWorld(nextSeed);
       this.setWorld(newWorld);
@@ -106,7 +109,7 @@ class CommandSession {
         const targetVerb = this.world.verbs.find(v => v.name.toLowerCase() === args.toLowerCase());
         if (targetVerb) {
           const out = `${this.world.keeper.prefix}: "${targetVerb.help}"`;
-          this.recordCommand({ text, verb, failed: false });
+          this.recordCommand({ text, verb, out, failed: false });
           return { out };
         }
       }
@@ -138,7 +141,7 @@ class CommandSession {
         `${this.world.keeper.prefix}: "Use the verbs as they are meant to be used. The system does not negotiate."`
       ].filter(Boolean).join('\n');
 
-      this.recordCommand({ text, verb, failed: false });
+      this.recordCommand({ text, verb, out, failed: false });
       return { out };
     }
 
@@ -146,14 +149,14 @@ class CommandSession {
     if (verb === 'laws') {
       const lawsList = this.world.laws.map((l, i) => `  [Law ${i + 1}] ${l}`).join('\n');
       const out = `${this.world.keeper.prefix}: "The operational laws of this station are binding:"\n${lawsList}`;
-      this.recordCommand({ text, verb, failed: false });
+      this.recordCommand({ text, verb, out, failed: false });
       return { out };
     }
 
     if (verb === 'entities' || verb === 'manifest' || verb === 'things' || (verb === 'look' && !args) || (verb === 'ls' && !args)) {
       const entityList = this.world.entities.map(e => `  * ${e.name} (${e.title}): ${e.desc}`).join('\n');
       const out = `${this.world.keeper.prefix}: "These entities inhabit the immediate space:"\n${entityList}`;
-      this.recordCommand({ text, verb, failed: false });
+      this.recordCommand({ text, verb, out, failed: false });
       return { out };
     }
 
@@ -161,34 +164,29 @@ class CommandSession {
     if (isKnownVerb && !args) {
       const verbObj = this.world.verbs.find(v => v.name.toLowerCase() === verb);
       const out = `${this.world.keeper.prefix}: "${verbObj.help}"`;
-      this.recordCommand({ text, verb, failed: false });
+      this.recordCommand({ text, verb, out, failed: false });
       return { out };
     }
 
     // 4. Entity query or interaction
-    // What if the user typed an entity directly as the first token? (e.g. "mercury-phial" or "inspect mercury-phial")
     let targetEntity = this.findEntity(args);
     let effectiveVerb = verb;
 
     if (!targetEntity) {
-      // Check if the whole text or first word is an entity
       targetEntity = this.findEntity(text);
       if (targetEntity) {
-        // If the user just typed the entity name
         const verbsReachable = targetEntity.reachVerbs || [];
         const out = [
           `[ENTITY: ${targetEntity.title.toUpperCase()}]`,
           targetEntity.desc,
           `${this.world.keeper.prefix}: "This entity responds to: ${verbsReachable.join(', ')}."`
         ].join('\n');
-        this.recordCommand({ text, verb: 'query', entity: targetEntity.name, failed: false });
+        this.recordCommand({ text, verb: 'query', entity: targetEntity.name, out, failed: false });
         return { out };
       }
     }
 
     if (targetEntity) {
-      // User provided a target entity!
-      // Check if effectiveVerb matches any interaction
       if (targetEntity.responses && targetEntity.responses[effectiveVerb]) {
         let prefixContext = '';
         if (lastCmd && lastCmd.entity === targetEntity.name) {
@@ -198,11 +196,10 @@ class CommandSession {
         }
 
         const out = `${prefixContext}${targetEntity.responses[effectiveVerb]}`;
-        this.recordCommand({ text, verb: effectiveVerb, entity: targetEntity.name, failed: false });
+        this.recordCommand({ text, verb: effectiveVerb, entity: targetEntity.name, out, failed: false });
         return { out };
       }
 
-      // If effectiveVerb is a generic inspection/view verb:
       if (['inspect', 'examine', 'view', 'read', 'check', 'look'].includes(effectiveVerb)) {
         const verbsReachable = targetEntity.reachVerbs || [];
         const out = [
@@ -210,34 +207,107 @@ class CommandSession {
           targetEntity.desc,
           `${this.world.keeper.prefix}: "You may reach it with: ${verbsReachable.join(', ')}."`
         ].join('\n');
-        this.recordCommand({ text, verb: effectiveVerb, entity: targetEntity.name, failed: false });
+        this.recordCommand({ text, verb: effectiveVerb, entity: targetEntity.name, out, failed: false });
         return { out };
       }
 
-      // If it is a known world verb, but NOT applicable to this entity
       if (isKnownVerb) {
         const out = `${this.world.keeper.prefix}: "You cannot '${effectiveVerb}' the ${targetEntity.title}. It does not answer to that motion. Try: ${(targetEntity.reachVerbs || []).join(', ')}."`;
-        this.recordCommand({ text, verb: effectiveVerb, entity: targetEntity.name, failed: true });
+        this.recordCommand({ text, verb: effectiveVerb, entity: targetEntity.name, out, failed: true });
         return { out };
       }
     }
 
     // 5. Unknown verb or unrecognizable syntax
-    // The keeper reacts in character, not canned "command not found".
-    let generatorIndex = 0;
     if (this.world.unknownResponseGenerators && this.world.unknownResponseGenerators.length > 0) {
-      generatorIndex = (text.length + this.history.length) % this.world.unknownResponseGenerators.length;
+      const generatorIndex = (text.length + this.history.length) % this.world.unknownResponseGenerators.length;
       const generator = this.world.unknownResponseGenerators[generatorIndex];
       const out = generator(text);
-      this.recordCommand({ text, verb, failed: true });
+      this.recordCommand({ text, verb, out, failed: true });
       return { out };
     }
 
-    // Fallback in-character unknown reaction
     const validVerbNames = this.world.verbs.map(v => v.name).join(', ');
     const out = `${this.world.keeper.prefix}: "I have no ear for '${text}'. This place only understands ${validVerbNames}, or '${this.world.helpVerb}' for instruction."`;
-    this.recordCommand({ text, verb, failed: true });
+    this.recordCommand({ text, verb, out, failed: true });
     return { out };
+  }
+
+  executeSync(rawText) {
+    return this.executeFallback(rawText);
+  }
+
+  async execute(rawText, options = {}) {
+    const text = (rawText || '').trim();
+    if (!text) {
+      return this.executeFallback(rawText);
+    }
+
+    const lower = text.toLowerCase();
+    const isReseed = (lower === 'new world' || lower === 'new-world' || lower === 'reseed' || lower === this.world.reseedVerb);
+
+    if (isReseed) {
+      const oldKeeper = this.world.keeper;
+      const oldName = this.world.name;
+      const nextSeed = ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
+
+      let newWorld = null;
+      const useLLM = !this.disableLLM && !options.disableLLM && process.env.LLM_DISABLED !== '1';
+      if (useLLM) {
+        newWorld = await generateWorldWithLLM(nextSeed, {
+          llmBase: this.llmBase,
+          timeout: 25000
+        });
+      }
+
+      if (!newWorld) {
+        newWorld = generateWorld(nextSeed);
+      }
+
+      this.setWorld(newWorld);
+      if (this.onReseed) {
+        this.onReseed(newWorld);
+      }
+
+      const out = [
+        `[SYSTEM DISSONANCE: REBOOTING REALITY]`,
+        `${oldKeeper.prefix}: "The seal breaks. ${oldName} dissolves back into the dark."`,
+        `...`,
+        `[BOOT SEQUENCE INITIALIZED // SEED: ${newWorld.seed}]`,
+        `NAME: ${newWorld.name}`,
+        `THEME: ${newWorld.theme}`,
+        `KEEPER: ${newWorld.keeper.name}`,
+        `---`,
+        ...newWorld.script
+      ].join('\n');
+
+      return {
+        out,
+        reseeded: true,
+        world: newWorld
+      };
+    }
+
+    // For standard commands, prefer LLM in-character response if available
+    const useLLM = !this.disableLLM && !options.disableLLM && process.env.LLM_DISABLED !== '1';
+    if (useLLM) {
+      try {
+        const llmOut = await generateCommandResponseWithLLM(this.world, text, this.history, {
+          llmBase: this.llmBase,
+          timeout: 8000
+        });
+
+        if (llmOut && typeof llmOut === 'string' && llmOut.trim().length > 0) {
+          this.recordCommand({ text, out: llmOut.trim(), failed: false });
+          return { out: llmOut.trim() };
+        }
+      } catch (_) {
+        // Fall back cleanly
+      }
+    }
+
+    // Automatic fallback to deterministic engine
+    return this.executeFallback(rawText);
   }
 }
 

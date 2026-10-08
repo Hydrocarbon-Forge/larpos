@@ -37,6 +37,7 @@ export MOZ_ENABLE_WAYLAND=1
 export XCURSOR_PATH=/usr/share/icons
 export XCURSOR_THEME=capitaine-cursors
 export XCURSOR_SIZE=24
+export LLM_BASE="${LLM_BASE:-http://192.168.1.72:8080}"
 
 mkdir -p -m 0700 "$XDG_RUNTIME_DIR"
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then

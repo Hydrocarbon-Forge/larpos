@@ -1,10 +1,11 @@
 // app/selftest.js — Verification test suite for LarpOS engine & command layer
-// Plain Node.js, zero dependencies.
+// Plain Node.js, zero dependencies. Runs offline-first with explicit LLM bypass.
 
 const assert = require('assert');
 const { generateWorld } = require('./world');
 const { CommandSession } = require('./commands');
 const { PRNG } = require('./prng');
+const { getLLMBase, getModelName, generateCommandResponseWithLLM } = require('./llm');
 
 console.log('=== LarpOS Engine Self-Test ===\n');
 
@@ -45,7 +46,6 @@ console.log('2. Testing seed differentiation & non-collision...');
   assert.notStrictEqual(w1.seed, w2.seed, 'Seed 1 and 2 must have different hex seeds');
   assert.notStrictEqual(w2.seed, w3.seed, 'Seed 2 and 42 must have different hex seeds');
 
-  // Verify worlds are visibly distinct
   const signatures = [w1, w2, w3].map(w => `${w.name} | ${w.keeper.name} | ${w.theme}`);
   assert.strictEqual(new Set(signatures).size, 3, 'Different seeds must produce distinct worlds');
   console.log(`  ✓ Seed 1:  "${w1.name}" (${w1.keeper.name})`);
@@ -72,27 +72,27 @@ console.log('3. Testing world spec schema conformance...');
   console.log('  ✓ 10 worlds tested across diverse seeds; all satisfy spec structure.');
 }
 
-// 4. Command layer & verbs dispatch
-console.log('4. Testing command layer verbs...');
+// 4. Command layer & verbs dispatch (exercising offline/combinatorial fallback)
+console.log('4. Testing command layer verbs (offline fallback)...');
 {
   const world = generateWorld(1);
-  const session = new CommandSession(world);
+  const session = new CommandSession(world, { disableLLM: true });
 
   // Each verb on its own gives its help line (excluding reseed verb which initiates reboot)
   for (const v of world.verbs) {
     if (v.name === world.reseedVerb) {
-      const hRes = session.execute(`help ${v.name}`);
+      const hRes = session.executeSync(`help ${v.name}`);
       assert(hRes && hRes.out.includes(world.keeper.prefix), `Help for '${v.name}' must respond`);
       continue;
     }
-    const res = session.execute(v.name);
+    const res = session.executeSync(v.name);
     assert(res && typeof res.out === 'string' && res.out.length > 0, `Verb '${v.name}' on its own must respond`);
     assert(res.out.includes(world.keeper.prefix) || res.out.toLowerCase().includes(v.name), `Response for '${v.name}' must contain keeper voice or verb help`);
   }
   console.log(`  ✓ All ${world.verbs.length} verbs respond when queried.`);
 
   // Help command lists verbs
-  const helpRes = session.execute('help');
+  const helpRes = session.executeSync('help');
   assert(helpRes && typeof helpRes.out === 'string', 'Help must respond');
   for (const v of world.verbs) {
     assert(helpRes.out.toLowerCase().includes(v.name.toLowerCase()), `Help must mention verb '${v.name}'`);
@@ -100,12 +100,12 @@ console.log('4. Testing command layer verbs...');
   console.log('  ✓ Generic "help" lists all available verbs.');
 
   // World-specific help verb
-  const customHelpRes = session.execute(world.helpVerb);
+  const customHelpRes = session.executeSync(world.helpVerb);
   assert(customHelpRes && customHelpRes.out.toLowerCase().includes(world.helpVerb.toLowerCase()), 'World-specific help verb must respond');
   console.log(`  ✓ World-specific help verb "${world.helpVerb}" functions.`);
 
   // Unknown verb triggers in-character reaction (not canned error)
-  const unknownRes = session.execute('hyperjump-xyz-999');
+  const unknownRes = session.executeSync('hyperjump-xyz-999');
   assert(unknownRes && typeof unknownRes.out === 'string', 'Unknown verb must respond');
   assert(!unknownRes.out.includes('command not found:'), 'Must not be canned "command not found"');
   assert(unknownRes.out.includes(world.keeper.prefix), 'Must be in keeper\'s voice');
@@ -116,13 +116,13 @@ console.log('4. Testing command layer verbs...');
 console.log('5. Testing entity reachability...');
 {
   const world = generateWorld(1);
-  const session = new CommandSession(world);
+  const session = new CommandSession(world, { disableLLM: true });
 
   for (const entity of world.entities) {
     assert(Array.isArray(entity.reachVerbs) && entity.reachVerbs.length > 0, `Entity ${entity.name} must specify reach verbs`);
     const primaryVerb = entity.reachVerbs[0];
     const cmd = `${primaryVerb} ${entity.name}`;
-    const res = session.execute(cmd);
+    const res = session.executeSync(cmd);
 
     assert(res && typeof res.out === 'string' && res.out.length > 20, `Entity ${entity.name} must yield descriptive content for "${cmd}"`);
     const lineCount = res.out.trim().split('\n').length;
@@ -137,10 +137,11 @@ console.log('6. Testing reseed mechanism...');
   const world = generateWorld(1);
   let reseededWorld = null;
   const session = new CommandSession(world, {
+    disableLLM: true,
     onReseed: (newW) => { reseededWorld = newW; }
   });
 
-  const res = session.execute('new world');
+  const res = session.executeSync('new world');
   assert(res.reseeded === true, 'Response must flag reseeded=true');
   assert(res.world && res.world.seed, 'Response must return new world');
   assert.notStrictEqual(res.world.seed, world.seed, 'New world must have different seed');
@@ -148,8 +149,8 @@ console.log('6. Testing reseed mechanism...');
   console.log(`  ✓ "new world" command successfully booted new reality: ${res.world.name} (${res.world.seed}).`);
 
   // Also test the world's own reseed verb
-  const sessionCustom = new CommandSession(world);
-  const resCustom = sessionCustom.execute(world.reseedVerb);
+  const sessionCustom = new CommandSession(world, { disableLLM: true });
+  const resCustom = sessionCustom.executeSync(world.reseedVerb);
   assert(resCustom.reseeded === true, 'World reseed verb must trigger reseed');
   assert(resCustom.world && resCustom.world.seed !== world.seed, 'World reseed verb must produce new seed');
   console.log(`  ✓ World's own reseed verb "${world.reseedVerb}" successfully booted new reality: ${resCustom.world.name} (${resCustom.world.seed}).`);
@@ -159,23 +160,23 @@ console.log('6. Testing reseed mechanism...');
 console.log('7. Testing conversation continuity...');
 {
   const world = generateWorld(1);
-  const session = new CommandSession(world);
+  const session = new CommandSession(world, { disableLLM: true });
   const ent1 = world.entities[0];
   const ent2 = world.entities[1];
 
-  session.execute(`${ent1.reachVerbs[0]} ${ent1.name}`);
-  const res2 = session.execute(`${ent2.reachVerbs[0]} ${ent2.name}`);
+  session.executeSync(`${ent1.reachVerbs[0]} ${ent1.name}`);
+  const res2 = session.executeSync(`${ent2.reachVerbs[0]} ${ent2.name}`);
   assert(res2.out.includes(ent1.name) || res2.out.includes(ent2.title), 'Response should acknowledge previous context');
   console.log('  ✓ Contextual continuity observed between sequential commands.');
 }
 
-// 8. HTTP Endpoints Verification
+// 8. HTTP Endpoints Verification (offline deterministic mode)
 console.log('8. Testing HTTP server endpoints (/, /api/world, /api/command)...');
 (async () => {
   const http = require('http');
   const { createServer } = require('./server');
 
-  const { server } = createServer(1, 0);
+  const { server } = createServer(1, 0, { disableLLM: true });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
 
@@ -241,7 +242,32 @@ console.log('8. Testing HTTP server endpoints (/, /api/world, /api/command)...')
     await new Promise((resolve) => server.close(resolve));
   }
 
-  console.log('\n=== All Self-Tests (including HTTP) Passed Successfully! ===');
+  // 9. Separate, clearly-marked local LLM availability probe (skipped if unreachable or disabled)
+  console.log('9. Probing local LLM integration (skipped when offline)...');
+  const llmDisabled = process.env.LLM_DISABLED === '1';
+  const llmBase = getLLMBase();
+  const modelName = llmDisabled ? null : await getModelName(llmBase, 2000);
+
+  if (!modelName) {
+    console.log(`  [SKIPPED] Local LLM API at ${llmBase} is unreachable or disabled (offline fallback verified).`);
+  } else {
+    console.log(`  ✓ Local LLM API detected at ${llmBase}`);
+    console.log(`  ✓ Model discovered: ${modelName}`);
+
+    const sampleWorld = generateWorld(1);
+    const reply = await generateCommandResponseWithLLM(sampleWorld, "look", [], {
+      llmBase,
+      timeout: 8000
+    });
+
+    if (reply) {
+      console.log(`  ✓ Keeper response generated via LLM:\n    "${reply.slice(0, 120)}..."`);
+    } else {
+      console.log('  [NOTE] LLM did not return text within timeout; fallback logic active.');
+    }
+  }
+
+  console.log('\n=== All Self-Tests Passed Successfully! ===');
 })().catch(err => {
   console.error('\nSelf-test failed:', err);
   process.exit(1);
