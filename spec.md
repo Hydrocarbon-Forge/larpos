@@ -157,22 +157,30 @@ Architecture (two layers):
   **generates the actual running screen + its behavior live** — not from a cached
   static HTML. The app is a spec that gets *instantiated* the moment you open it.
 
-Interpretation policy (Nathan, 2026-10-08 — the drift is the point, not a bug):
+Interpretation policy (Nathan, 2026-10-08 — drift AND subjectivity are the point, not bugs):
 
+- **The interpreter is a reader, not a validator.** The Larp script is made up by
+  the AI, so there is no ground truth a line of it could be "wrong" against —
+  you can't call it an error, because the whole script is the AI's fiction. When a
+  section reads garbled, contradictory, or "like an error," the interpreter does
+  not flag it or reject it; it *interprets it however it subjectively feels*. A
+  corrupt section becomes a damaged/glitchy app; an incoherent line becomes
+  in-world weirdness. Subjectivity is the feature, not a fallback to hide.
 - The LLM is non-deterministic, so opening an app **may** produce a slightly
   different instantiation than last time, **or** the same one. We do NOT force
-  variety or force stability — we let the model be what it is. "You don't intend for
-  things to differ, but they will" is the intended behavior, not an accident to
+  variety or force stability — we let the model be what it is. "You don't intend
+  for things to differ, but they will" is intended behavior, not an accident to
   paper over.
 - **Held while open:** once an app instance is rendered, it does NOT re-roll while
   you are using it (no flicker under the cursor). Reinterpret happens on
   close/reopen, driven by the model's natural variance.
-- **Never a dead screen (the one guard):** if the LLM returns a broken/empty
-  app render, the interpreter falls back to a generic shell for that app (title +
-  the named interactive element, minimal layout) rather than a white screen. The
-  kiosk never dies.
-- **Offline never hangs:** with the LLM unreachable, the interpreter's combinatorial
-  fallback renders a valid app from the description so the app still opens.
+- **The only hard guard is transport, not content:** LLM unreachable / timeout /
+  unparsable *response envelope* → the combinatorial fallback renders a valid app
+  so the kiosk never hangs. Garbled *content* is never a fallback trigger — it is
+  fiction to be interpreted. A minimal "damaged app" shell exists only as a
+  last-resort against a literal white screen (the kiosk never dies), framed
+  in-world as the app being broken — not a generic fallback that flattens the
+  fiction.
 
 UI contract:
 
