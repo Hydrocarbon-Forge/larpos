@@ -826,17 +826,17 @@ console.log('9. Testing HTTP server endpoints...');
     const prevEnv = process.env.LARPOS_WORLD_TIMEOUT_MS;
     try {
       delete process.env.LARPOS_WORLD_TIMEOUT_MS;
-      const defaultTimeout = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
-      assert.strictEqual(defaultTimeout, 120000, 'LARPOS_WORLD_TIMEOUT_MS must default to 120000ms');
+      const defaultTimeout = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 300000;
+      assert.strictEqual(defaultTimeout, 300000, 'LARPOS_WORLD_TIMEOUT_MS must default to 300000ms');
 
       process.env.LARPOS_WORLD_TIMEOUT_MS = '60000';
-      const customTimeout = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
+      const customTimeout = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 300000;
       assert.strictEqual(customTimeout, 60000, 'LARPOS_WORLD_TIMEOUT_MS must honor custom env var');
     } finally {
       if (prevEnv !== undefined) process.env.LARPOS_WORLD_TIMEOUT_MS = prevEnv;
       else delete process.env.LARPOS_WORLD_TIMEOUT_MS;
     }
-    console.log('  ✓ Configurable LARPOS_WORLD_TIMEOUT_MS default (120000ms) and override verified.');
+    console.log('  ✓ Configurable LARPOS_WORLD_TIMEOUT_MS default (300000ms) and override verified.');
 
     // E. Serialization queue & in-flight GET /api/world 202 behavior
     const http = require('http');

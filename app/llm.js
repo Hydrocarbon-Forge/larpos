@@ -160,7 +160,7 @@ async function generateWorldWithLLM(seedInput, options = {}) {
     : 'random';
 
   const startTime = Date.now();
-  const timeoutMs = options.timeout || parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
+  const timeoutMs = options.timeout || parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 300000;
 
   // Always prepare deterministic fallback for the exact same seed & concept
   const fallback = getWorldModule().generateWorld(seedInput, concept);

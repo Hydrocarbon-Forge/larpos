@@ -250,7 +250,7 @@ function createServer(initialSeed, port = 8080, options = {}) {
           }
         } catch (_) {}
 
-        const timeoutMs = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 120000;
+        const timeoutMs = parseInt(process.env.LARPOS_WORLD_TIMEOUT_MS, 10) || 300000;
 
         const newWorld = await serializeWorldGeneration(async () => {
           let world = null;
